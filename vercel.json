@@ -1,0 +1,16 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "buildCommand": "npm run build",
+  "installCommand": "npm install",
+  "env": {
+    "COZE_WORKFLOW_USE_MOCK": "1",
+    "NEXT_PUBLIC_DEMO_MODE": "1"
+  },
+  "build": {
+    "env": {
+      "COZE_WORKFLOW_USE_MOCK": "1",
+      "NEXT_PUBLIC_DEMO_MODE": "1"
+    }
+  }
+}

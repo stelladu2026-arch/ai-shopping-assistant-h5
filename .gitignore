@@ -1,0 +1,11 @@
+.next
+.env
+.env*.local
+node_modules
+out
+dist
+.DS_Store
+*.log
+.vercel
+*.zip
+ai-shopping-assistant-h5-source

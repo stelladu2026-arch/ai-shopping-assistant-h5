@@ -1,0 +1,5 @@
+ai-shopping-assistant-h5-source
+*.zip
+.cursor
+coverage
+.git
