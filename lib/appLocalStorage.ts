@@ -11,6 +11,8 @@ export const APP_LOCAL_STORAGE_KEYS = {
   authSession: "ai-shopping-assistant.authSession.v1",
   /** 店长：会话摘要跟进状态覆盖（按摘要 id） */
   managerSummaryFollowUp: "ai-shopping-assistant.managerSummaryFollowUp.v1",
+  /** 店长：沉淀为模板的话术记录 */
+  managerTemplates: "ai-shopping-assistant.managerTemplates.v1",
   /** 演示：下次对话请求模拟失败（一次性），由设置页开启 */
   demoSimulateChatFailOnce: "ai-shopping-assistant.demoSimulateChatFailOnce.v1",
 } as const;
