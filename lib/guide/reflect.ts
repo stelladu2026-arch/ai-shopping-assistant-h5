@@ -1,11 +1,12 @@
 // @ts-nocheck
+import { shanghaiDate } from "./business-date.mjs";
 import catalog from "../../data/catalog.json";
 import promotions from "../../data/promotions.json";
 
 const LIGHT = ['米白', '浅灰'];
-const TODAY = '2026-10-06';
 
-export function reflect(state, confirmedFacts) {
+
+export function reflect(state, confirmedFacts, today = shanghaiDate()) {
   const checks = [];
   const constraints = state?.constraints || {};
   const ids = state?.confirmed_product_id ? [state.confirmed_product_id] : (state?.candidate_ids || []);
@@ -39,7 +40,7 @@ export function reflect(state, confirmedFacts) {
   if (state?.confirmed_product_id && state.card?.promotions) {
     for (const promo of state.card.promotions) {
       const source = promotions.find(item => item.id === promo.id);
-      const ok = Boolean(source && source.products.includes(state.confirmed_product_id) && source.start <= TODAY && source.end >= TODAY);
+      const ok = Boolean(source && source.products.includes(state.confirmed_product_id) && source.start <= today && source.end >= today);
       checks.push({target: promo.id, name: '活动', ok, detail: ok ? `${promo.id}在有效期内` : `${promo.id}不能当成有效活动`});
     }
   }

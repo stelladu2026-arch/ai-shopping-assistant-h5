@@ -10,7 +10,9 @@
     "lint": "next lint",
     "package:zip": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/package-frontend.ps1",
     "deploy:demo": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/deploy-demo.ps1",
-    "deploy:preview": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/deploy-demo.ps1 -Preview"
+    "deploy:preview": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/deploy-demo.ps1 -Preview",
+    "test": "node tests/guide-rules.mjs && node tests/model-config.mjs && node tests/h5-layout.mjs && node tests/agent-modules.mjs && node --import tsx --test tests/knowledge.test.mts",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@langchain/langgraph": "^1.4.20",
@@ -28,6 +30,10 @@
     "eslint-config-next": "^15.0.0",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
+    "tsx": "^4.23.15",
     "typescript": "^5.6.0"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }

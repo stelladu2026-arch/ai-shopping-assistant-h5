@@ -1,6 +1,7 @@
 // @ts-nocheck
 
 const NOTES = {
+  knowledge: "先查门店资料并引用原文，不进入选品或素材生成。",
   ask: "还缺能往下筛的条件，先补问，不编造商品。",
   product_decision: "按这次接待里的预算、尺寸、品类、颜色和材质筛选。依据来自门店商品资料。",
   content: "素材只使用已经确认的这件商品。",
@@ -10,6 +11,7 @@ const NOTES = {
 
 export function routeEdge(input) {
   const intent = input?.intent || "turn";
+  if (intent === "knowledge") return "knowledge";
   const confirmed = input?.confirmedProductId || null;
   if (intent === "content") return confirmed ? "content" : "blocked";
   if (intent === "confirm" || intent === "product_decision") return "product_decision";

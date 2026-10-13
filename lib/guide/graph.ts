@@ -5,6 +5,8 @@ import { runContentNode } from "./content-node";
 import { runProductDecision } from "./product-decision";
 import { routeEdge, routeNote } from "./route";
 
+import { runKnowledgeNode } from "./knowledge-node";
+
 const runs = new Map();
 
 const State = Annotation.Root({
@@ -59,6 +61,12 @@ function guideGraph() {
       run.trace.result = runProductDecision(run.session, run.request);
       return {};
     })
+    .addNode("knowledge", async (state) => {
+      const run = runs.get(state.runId);
+      run.trace.entered.push("knowledge");
+      run.trace.result = runKnowledgeNode(run.session, run.request);
+      return {};
+    })
     .addNode("content", async (state) => {
       const run = runs.get(state.runId);
       run.trace.entered.push("content");
@@ -69,12 +77,14 @@ function guideGraph() {
     .addConditionalEdges("route", (state) => state.edge, {
       product_decision: "product_decision",
       content: "content",
+      knowledge: "knowledge",
       ask: END,
       blocked: END,
       stay: END,
     })
     .addEdge("product_decision", END)
     .addEdge("content", END)
+    .addEdge("knowledge", END)
     .compile();
   return compiled;
 }

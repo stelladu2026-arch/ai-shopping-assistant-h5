@@ -77,8 +77,10 @@ export async function runContentNode(session, request) {
     const wantsImage = form.outputKind === "image_only" || form.outputKind === "rich";
     let imageCapped = false;
     let imageNetwork = false;
+    let imageNote = "";
     if (wantsImage) {
       const generated = await executeImage(facts, process.env, fetch, session.id);
+      imageNote = generated.requiresConfirmation ? generated.label : "";
       imageCapped = Boolean(generated.capped);
       imageNetwork = Boolean(generated.network);
       session.record.image = {
@@ -102,7 +104,7 @@ export async function runContentNode(session, request) {
       bodyTitle: facts.name,
       bodyText: form.outputKind === "image_only" ? "" : bodyText,
       hashtags: [],
-      imageSuggestion: "",
+      imageSuggestion: imageNote,
       generatedImageUrl: "",
       commentThreadScript: "",
       pendingReview: false,

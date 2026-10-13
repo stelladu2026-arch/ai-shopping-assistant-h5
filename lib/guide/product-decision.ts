@@ -19,8 +19,6 @@ export function lookupStoreDoc(query) {
 }
 
 function readStore(sessionId, query) {
-  const gate = consumeCall(sessionId, "retrieve", LIMITS.retrieve);
-  if (!gate.ok) return { capped: true, hit: null };
   return { capped: false, hit: retrieve(query) };
 }
 
@@ -29,7 +27,7 @@ function factsFor(sessionId, productId, plan) {
   if (!product) return null;
   const read = readStore(sessionId, product.name);
   const hit = read.hit;
-  const promoPlan = plan || buildPromoPlan(product.id);
+  const promoPlan = buildPromoPlan(product.id); // Re-check validity at confirmation time.
   return {
     id: product.id,
     name: product.name,
@@ -72,6 +70,8 @@ export function runProductDecision(session, request) {
   if (!gate.ok) {
     return { ok: true, capped: true, reply: capText("product_decision") };
   }
+  const retrievalGate = consumeCall(session.id, "retrieve", LIMITS.retrieve);
+  if (!retrievalGate.ok) return {ok:true,capped:true,reply:capText("retrieve")};
   const previous = loadStep(session.id, STEP);
   const constraints = request?.constraints || session.record.state.constraints;
   if (request?.intent === "confirm") {

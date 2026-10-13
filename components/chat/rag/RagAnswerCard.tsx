@@ -9,6 +9,7 @@ interface RagAnswerCardProps {
 }
 
 function buildRagCopyText(data: RagPolicyAnswer) {
+  if (data.retrievalMode) return [data.policyTitle, data.synthetic ? "演示资料，不代表真实门店承诺" : "", data.suggestedScript, ...(data.sources || []).map((s,i)=>`[${i+1}] ${s.title} · ${s.section} · ${s.version} · ${s.source}`)].filter(Boolean).join("\n");
   return [
     data.policyTitle,
     ...data.priceHighlights.map((p) => `${p.label} ${p.value}`),
@@ -26,6 +27,24 @@ export function RagAnswerCard({ data, headerTrailing }: RagAnswerCardProps) {
       /* ignore */
     }
   };
+
+  if (data.retrievalMode) return (
+    <section className="mt-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-2"><h3 className="text-sm font-bold text-slate-900">{data.policyTitle}</h3>{headerTrailing}</div>
+      <p className="mt-2 text-xs text-amber-800">{data.synthetic ? "演示知识资料 · 不代表真实门店承诺" : "本地资料原文摘录"}</p>
+      <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-800">{data.suggestedScript}</p>
+      {Boolean(data.sources?.length) && <details className="mt-3 border-t border-slate-100 pt-3">
+        <summary className="cursor-pointer text-sm font-semibold text-brand-700">查看 {data.sources!.length} 条出处</summary>
+        {data.sources!.map((s,i)=><div key={s.id} className="mt-3 border-l-2 border-brand-200 pl-3">
+          <p className="text-xs font-semibold">[{i+1}] {s.title} · {s.section}</p>
+          <p className="mt-1 text-xs text-slate-500">版本 {s.version} · 有效期 {s.validFrom || "未标注"} 至 {s.validTo || "未标注"}</p>
+          <blockquote className="mt-2 whitespace-pre-wrap text-xs leading-6 text-slate-600">{s.excerpt}</blockquote>
+          <p className="mt-1 break-all text-[10px] text-slate-400">{s.source} · {s.id}</p>
+        </div>)}
+      </details>}
+      <button type="button" onClick={onCopy} className="mt-4 min-h-11 w-full rounded-xl bg-brand-600 px-3 py-2 text-sm font-semibold text-white">复制回答与出处</button>
+    </section>
+  );
 
   return (
     <div className="mt-2 overflow-hidden rounded-saas border border-slate-200/70 bg-white shadow-surface ring-1 ring-slate-900/[0.04]">

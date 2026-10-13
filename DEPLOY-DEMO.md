@@ -1,3 +1,5 @@
+> 历史文档：当前 guide-agent 主线使用 Next.js + 服务端 SQLite，请先看 README.md 和 docs/IMPLEMENTATION-AUDIT-2026-10-13.md。以下旧 Coze / 纯前端 / 部署流程尚未按当前版本验收。
+
 # 线上演示部署（发给面试官）
 
 本项目为 **Next.js 全栈**（含 `/api/agent/chat`），推荐用 **Vercel** 免费托管，几分钟可得固定 HTTPS 链接。

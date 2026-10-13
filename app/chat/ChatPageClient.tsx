@@ -454,6 +454,7 @@ export function ChatPageClient() {
         },
       ]);
       setRagHistory(appendRagQueryHistory(trimmed));
+      void loadGuide(sessionId);
     } catch {
       setMessagesRag((p) => [
         ...p,
@@ -466,7 +467,7 @@ export function ChatPageClient() {
     } finally {
       setSending(false);
     }
-  }, [sending, sessionId]);
+  }, [sending, sessionId, loadGuide]);
 
   const sendRag = useCallback(() => {
     void sendRagText(ragDraft, ragFile);

@@ -11,6 +11,8 @@ import { lookupStoreDoc } from "./product-decision";
 import { describeProcess } from "./process-view";
 import { buildPromoPlan } from "./promos";
 
+import { isKnowledgeQuery } from "./knowledge-core.mjs";
+
 function doubtOf(text, pending) {
   if (!pending || /^(参数错误|资料缺失|无结果|网络错误)/.test(pending)) return null;
   if (/便宜点/.test(text) || /具体预算|预算上限|自行降低/.test(pending)) return "预算";
@@ -343,7 +345,7 @@ export async function guideAct(body) {
     };
     result = {
       ok: true,
-      leadText: generated.capped ? generated.label : generated.network ? FAILURE_TEXT.network : generated.simulation ? "配图仍是演示回放、待核对。" : "配图已请求，结果仍待核对。",
+      leadText: generated.capped ? generated.label : generated.network ? FAILURE_TEXT.network : generated.simulation ? generated.label : "配图已请求，结果仍待核对。",
       structured: snapshot(session, memory),
     };
   } else if (action === "confirm") {
@@ -365,6 +367,7 @@ export async function guideAct(body) {
       };
     }
     session.record.offerSwitch = false;
+    session.record.knowledgeContext = null;
     result = {
       ok: true,
       leadText: ran.reply,
@@ -446,6 +449,14 @@ export async function guideAct(body) {
       structured: snapshot(session, memory),
       steps: loadSteps(session.id),
     };
+  } else if (action === "turn" && isKnowledgeQuery(body.text, session.record.knowledgeContext)) {
+    if (body.revision != null && Number(body.revision) !== session.record.state.revision) {
+      return {ok:false,error:"revision_conflict",structured:snapshot(session,memory)};
+    }
+    const ran = await runGuideGraph(session, {intent:"knowledge",text:String(body.text || "")});
+    session.record.state.revision += 1;
+    result = {ok:ran.ok,leadText:ran.reply,graph:graphView(ran),
+      structured:ran.output || snapshot(session,memory),steps:loadSteps(session.id)};
   } else {
     const text = String(body.text || "");
     const previousConfirmed = session.record.state.confirmed_product_id;

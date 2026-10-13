@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { shanghaiDate } from "./business-date.mjs";
 import catalog from "../../data/catalog.json";
 import promotions from "../../data/promotions.json";
 import { buildPromoPlan } from "./promos";
@@ -364,7 +365,7 @@ function parseCopy(text) {
   return {asked, maxChars: chars ? Number(chars[1]) : null, tone, refused};
 }
 
-function activePromotions(productId, today = '2026-10-06') {
+function activePromotions(productId, today = shanghaiDate()) {
   return promotions.filter(item =>
     item.products.includes(productId) &&
     item.store_id === 'demo' &&
