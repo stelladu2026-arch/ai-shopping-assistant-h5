@@ -9,3 +9,5 @@ dist
 .vercel
 *.zip
 ai-shopping-assistant-h5-source
+data/guide.sqlite
+data/guide.sqlite-*

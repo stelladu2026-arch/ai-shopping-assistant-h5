@@ -23,7 +23,7 @@ export interface ChatSessionRecord {
 }
 
 /** 收藏粒度：单条 AI 消息内容 */
-export type FavoriteContentType = "moments_card" | "rag_card" | "text_reply";
+export type FavoriteContentType = "product" | "material" | "moments_card" | "rag_card" | "text_reply";
 
 export interface FavoriteRecord {
   id: string;

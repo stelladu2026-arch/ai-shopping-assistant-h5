@@ -1,70 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { storeDashboardMock } from "@/mock/storeInsights";
-
-type CozeBanner =
-  | { status: "loading" }
-  | { status: "ok"; botCount: number }
-  | { status: "error"; message: string };
 
 export function StoreInsightsDashboard() {
   const m = storeDashboardMock;
   const { product, campaign, copy: copyIntent } = m.intentShare;
 
-  const [coze, setCoze] = useState<CozeBanner>({ status: "loading" });
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/manager/coze/workspace-summary")
-      .then(async (res) => {
-        const data = (await res.json()) as { ok?: boolean; botCount?: number; error?: string };
-        if (cancelled) return;
-        if (res.ok && data.ok && typeof data.botCount === "number") {
-          setCoze({ status: "ok", botCount: data.botCount });
-        } else {
-          setCoze({
-            status: "error",
-            message: typeof data.error === "string" ? data.error : `请求失败 (${res.status})`,
-          });
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setCoze({ status: "error", message: "网络异常" });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   const pct = (v: number) => `${Math.round(v * 100)}%`;
 
   const cards = [
-    ...(coze.status === "ok"
-      ? [
-          {
-            label: "Coze · 已发布 Bot",
-            value: String(coze.botCount),
-            hint: "当前 Workspace（开放平台 PAT）",
-          },
-        ]
-      : coze.status === "loading"
-        ? [
-            {
-              label: "Coze 连接",
-              value: "…",
-              hint: "正在校验开放平台与工作空间",
-            },
-          ]
-        : coze.status === "error"
-          ? [
-              {
-                label: "Coze 连接",
-                value: "—",
-                hint: coze.message,
-              },
-            ]
-          : []),
     {
       label: "活跃导购数",
       value: String(m.activeGuides),

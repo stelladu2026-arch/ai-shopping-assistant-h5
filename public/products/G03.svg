@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="480" viewBox="0 0 640 480">
+  <rect width="640" height="480" fill="#f7f4ee"/>
+  <g color="#c4a574">
+    <rect x="150" y="120" width="340" height="240" rx="12" fill="currentColor"/><path d="M320 120 V360 M150 240 H490" stroke="#fff" stroke-width="8" opacity="0.45"/>
+  </g>
+  <text x="32" y="48" fill="#334155" font-size="28" font-family="sans-serif">柜 · 原木色</text>
+  <text x="32" y="440" fill="#64748b" font-size="22" font-family="sans-serif">样例示意图，不是门店实拍</text>
+</svg>

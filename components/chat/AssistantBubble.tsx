@@ -1,6 +1,7 @@
 "use client";
 
 import { GenerationFeedbackBar } from "@/components/chat/GenerationFeedbackBar";
+import { GuideTurnCard } from "@/components/chat/guide/GuideTurnCard";
 import { MomentsResultCard } from "@/components/chat/moments/MomentsResultCard";
 import { RagAnswerCard } from "@/components/chat/rag/RagAnswerCard";
 import type { AgentStructuredBlock } from "@/types/agent";
@@ -20,6 +21,7 @@ interface AssistantBubbleProps {
   continueGenerateLabel?: string;
   onMomentsDownloadHint?: (message: string) => void;
   actionsDisabled?: boolean;
+  onGuideAction?: (body: Record<string, unknown>) => void;
 }
 
 function FavoriteStarButton({
@@ -82,6 +84,7 @@ export function AssistantBubble({
   continueGenerateLabel,
   onMomentsDownloadHint,
   actionsDisabled,
+  onGuideAction,
 }: AssistantBubbleProps) {
   const showActions = Boolean(structured && onContentFeedback && onRegenerate);
   const hideLeadBecauseMomentsCard = structured?.scene === "moments_marketing";
@@ -115,6 +118,9 @@ export function AssistantBubble({
         {leadText && !hideLeadBecauseMomentsCard ? (
           <p className="text-[0.88rem] font-medium leading-relaxed text-slate-700">{leadText}</p>
         ) : null}
+        {structured?.scene === "guide_turn" && onGuideAction ? (
+          <GuideTurnCard data={structured} disabled={actionsDisabled} onAction={onGuideAction} />
+        ) : null}
         {structured?.scene === "moments_marketing" ? (
           <div>
             <MomentsResultCard
@@ -122,6 +128,26 @@ export function AssistantBubble({
               onDownloadHint={onMomentsDownloadHint}
               headerTrailing={favoriteOnCard ? favoriteTrigger : undefined}
             />
+            {onToggleFavorite ? (
+              <button
+                type="button"
+                disabled={actionsDisabled}
+                onClick={onToggleFavorite}
+                className="mt-2 min-h-11 w-full rounded-xl border border-slate-200 bg-white text-[0.85rem] font-bold text-slate-800"
+              >
+                {favorited ? "已收藏这套素材" : "收藏这套素材"}
+              </button>
+            ) : null}
+            {onRegenerate ? (
+              <button
+                type="button"
+                disabled={actionsDisabled}
+                onClick={onRegenerate}
+                className="mt-2 min-h-11 w-full rounded-xl border border-slate-200 bg-white text-[0.85rem] font-bold text-slate-800"
+              >
+                重新生成素材
+              </button>
+            ) : null}
             {showActions ? (
               <GenerationFeedbackBar
                 feedback={contentFeedback}

@@ -62,6 +62,11 @@ export function removeFavoriteByMessageId(messageId: string): void {
   if (typeof window === "undefined") return;
   const next = listFavorites().filter((f) => f.sourceMessageId !== messageId);
   persist(next);
+  void fetch("/api/guide/act", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "unfavorite", sourceMessageId: messageId, id: messageId }),
+  });
 }
 
 export function removeFavoriteById(id: string): void {
@@ -72,9 +77,8 @@ export function removeFavoriteById(id: string): void {
 
 function inferType(msg: ChatMessage): FavoriteContentType | null {
   if (msg.leadText === "重新生成中…") return null;
-  if (msg.structured?.scene === "moments_marketing") return "moments_card";
-  if (msg.structured?.scene === "store_rag_query") return "rag_card";
-  if (msg.leadText?.trim()) return "text_reply";
+  if (msg.structured?.scene === "moments_marketing") return "material";
+  if (msg.structured?.scene === "guide_turn" && msg.structured.confirmedName) return "product";
   return null;
 }
 
@@ -86,14 +90,12 @@ export function canFavoriteMessage(msg: ChatMessage): boolean {
 
 function buildTitle(msg: ChatMessage): string {
   if (msg.structured?.scene === "moments_marketing") {
-    return msg.structured.cardTitle || "朋友圈内容";
+    return msg.structured.bodyTitle || "素材";
   }
-  if (msg.structured?.scene === "store_rag_query") {
-    return msg.structured.policyTitle || "政策摘要";
+  if (msg.structured?.scene === "guide_turn" && msg.structured.confirmedName) {
+    return msg.structured.confirmedName;
   }
-  const t = msg.leadText?.trim();
-  if (t) return t.length > 32 ? `${t.slice(0, 32)}…` : t;
-  return "AI 回复";
+  return "收藏";
 }
 
 function buildContentPlain(msg: ChatMessage): string {
@@ -130,7 +132,43 @@ export function addFavoriteFromMessage(params: {
   const list = listFavorites().filter((f) => f.sourceMessageId !== rec.sourceMessageId);
   list.unshift(rec);
   persist(list.slice(0, 200));
+  void fetch("/api/guide/act", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action: "favorite",
+      id: rec.id,
+      sourceMessageId: rec.sourceMessageId,
+      sessionId: rec.sessionId,
+      kind: rec.type === "product" ? "product" : "material",
+      title: rec.title,
+      contentPlain: rec.contentPlain,
+    }),
+  });
   return rec;
+}
+
+export function mergeServerFavorites(rows: Array<Partial<FavoriteRecord>>): void {
+  if (typeof window === "undefined" || !Array.isArray(rows)) return;
+  const local = listFavorites();
+  let changed = false;
+  for (const row of rows) {
+    if (!row?.id || !row.title) continue;
+    if (row.type !== "product" && row.type !== "material" && row.type !== "moments_card") continue;
+    if (local.some((item) => item.id === row.id || (row.sourceMessageId && item.sourceMessageId === row.sourceMessageId))) continue;
+    local.push({
+      id: row.id,
+      sourceMessageId: row.sourceMessageId || row.id,
+      sessionId: row.sessionId || "",
+      sessionTitle: row.sessionTitle || "这次接待",
+      type: row.type,
+      title: row.title,
+      contentPlain: row.contentPlain || "",
+      createdAt: row.createdAt || Date.now(),
+    });
+    changed = true;
+  }
+  if (changed) persist(local.sort((a, b) => b.createdAt - a.createdAt).slice(0, 200));
 }
 
 export function toggleFavorite(params: {

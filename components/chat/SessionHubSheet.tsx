@@ -56,7 +56,23 @@ export function SessionHubSheet({
 
   const favoritesPreview = useMemo(() => {
     void tick;
-    return listFavorites().slice(0, 5);
+    const items = listFavorites();
+    const products: typeof items = [];
+    const materials: typeof items = [];
+    const seen = new Set<string>();
+    for (const item of items) {
+      if (item.type === "product") {
+        const key = item.structured?.scene === "guide_turn"
+          ? item.structured.confirmedFacts?.name || item.structured.confirmedName || item.structured.confirmedFacts?.id || item.title
+          : item.title;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        products.push(item);
+      } else if (item.type === "material" || item.type === "moments_card") {
+        materials.push(item);
+      }
+    }
+    return { products: products.slice(0, 3), materials: materials.slice(0, 3) };
   }, [tick]);
 
   if (!open || !mounted) return null;
@@ -103,7 +119,7 @@ export function SessionHubSheet({
             <h3 className="mb-1.5 px-2 text-[0.65rem] font-bold uppercase tracking-wide text-slate-400">最近</h3>
             {sessionsPreview.length === 0 && (!showRagBlock || ragQueryHistory.length === 0) ? (
               <p className="px-2 py-2 text-[0.75rem] font-medium text-slate-500">
-                暂无记录。发起会话或政策查询后会出现在这里。
+                暂无记录。发起选品后会出现在这里。
               </p>
             ) : (
               <ul className="space-y-1">
@@ -154,28 +170,40 @@ export function SessionHubSheet({
           </section>
 
           <section className="mb-2">
-            <h3 className="mb-1.5 px-2 text-[0.65rem] font-bold uppercase tracking-wide text-slate-400">收藏</h3>
-            {favoritesPreview.length === 0 ? (
-              <p className="px-2 py-2 text-[0.75rem] font-medium text-slate-500">暂无收藏</p>
+            <h3 className="mb-1.5 px-2 text-[0.72rem] font-bold text-slate-500">收藏</h3>
+            {favoritesPreview.products.length === 0 && favoritesPreview.materials.length === 0 ? (
+              <p className="px-2 py-2 text-[0.75rem] font-medium leading-relaxed text-slate-500">在商品卡上点收藏，之后可以在这里直接生成素材。</p>
             ) : (
-              <ul className="space-y-1">
-                {favoritesPreview.map((row) => (
-                  <li key={row.id}>
-                    <Link
-                      href="/sessions"
-                      onClick={onClose}
-                      className="flex w-full items-start gap-2 rounded-xl border border-slate-100 bg-white px-3 py-2.5 text-left active:bg-slate-50"
-                    >
-                      <span className="text-[0.85rem] text-amber-500" aria-hidden>
-                        ★
-                      </span>
-                      <span className="min-w-0 flex-1 text-[0.8rem] font-semibold leading-snug text-slate-800">
-                        {row.title}
-                      </span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
+              <div className="space-y-2">
+                <p className="px-2 text-[0.72rem] font-bold text-slate-800">商品</p>
+                {favoritesPreview.products.length === 0 ? (
+                  <p className="px-2 text-[0.75rem] text-slate-500">还没有收藏商品。</p>
+                ) : (
+                  <ul className="space-y-1">
+                    {favoritesPreview.products.map((row) => (
+                      <li key={row.id}>
+                        <Link href="/sessions" onClick={onClose} className="block rounded-xl border border-slate-100 bg-white px-3 py-2.5 text-[0.8rem] font-semibold text-slate-800 active:bg-slate-50">
+                          {row.title}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <p className="px-2 text-[0.72rem] font-bold text-slate-800">素材</p>
+                {favoritesPreview.materials.length === 0 ? (
+                  <p className="px-2 text-[0.75rem] text-slate-500">还没有收藏素材。</p>
+                ) : (
+                  <ul className="space-y-1">
+                    {favoritesPreview.materials.map((row) => (
+                      <li key={row.id}>
+                        <Link href="/sessions" onClick={onClose} className="block rounded-xl border border-slate-100 bg-white px-3 py-2.5 text-[0.8rem] font-semibold text-slate-800 active:bg-slate-50">
+                          {row.title}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             )}
           </section>
         </div>

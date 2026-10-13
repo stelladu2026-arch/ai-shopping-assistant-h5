@@ -112,7 +112,7 @@ export function MomentsResultCard({ data, onDownloadHint, headerTrailing }: Mome
               />
             ) : (
               <div className="mt-2 flex aspect-[4/3] max-h-48 items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50 text-[0.75rem] font-medium text-slate-400">
-                配图预览
+                演示回放、待核对
               </div>
             )}
             {data.imageSuggestion?.trim() ? (

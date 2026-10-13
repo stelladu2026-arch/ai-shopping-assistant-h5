@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import { PhoneFrameOverlay } from "@/components/home/PhoneFrameOverlay";
+import { MemoryPanel } from "@/components/home/MemoryPanel";
 import { useAppSettings } from "@/hooks/useAppSettings";
 import { useAuth } from "@/hooks/useAuth";
 import type { HomeProfileInfo } from "@/types/home";
@@ -159,10 +160,9 @@ export function SettingsDrawer({ open, onClose, profile }: SettingsDrawerProps) 
                   登录
                 </button>
                 <p className="mt-2.5 text-[0.65rem] leading-relaxed text-slate-500">
-                  演示账号：<span className="font-mono text-slate-600">guide01</span> /{" "}
-                  <span className="font-mono text-slate-600">manager01</span>，密码{" "}
-                  <span className="font-mono text-slate-600">demo123</span>
+                  本地演示身份，不连接外部账号，页面不填写模型密钥。
                 </p>
+                <MemoryPanel />
               </form>
               <div className="mt-4 flex items-start gap-3 rounded-xl border border-dashed border-slate-200/90 bg-white/80 px-3 py-3">
                 <div

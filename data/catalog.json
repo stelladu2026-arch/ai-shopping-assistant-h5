@@ -1,0 +1,22 @@
+[
+  {"id":"S01","version":1,"name":"云朵双人沙发","category":"沙发","model":"YD-180","price_cny":2699,"width_cm":180,"color":"米白","material":"布艺","style":"现代","synthetic":true,"image":"/products/S01.png"},
+  {"id":"S02","version":1,"name":"云朵小双人沙发","category":"沙发","model":"YD-160","price_cny":2299,"width_cm":160,"color":"浅灰","material":"布艺","style":"现代","synthetic":true,"image":"/products/S02.png"},
+  {"id":"S03","version":1,"name":"云朵皮质沙发","category":"沙发","model":"YD-P200","price_cny":4599,"width_cm":200,"color":"米白","material":"皮质","style":"轻奢","synthetic":true,"image":"/products/S03.png"},
+  {"id":"S04","version":1,"name":"林间三人沙发","category":"沙发","model":"LJ-220","price_cny":3299,"width_cm":220,"color":"深绿","material":"布艺","style":"自然","synthetic":true,"image":"/products/S04.png"},
+  {"id":"T01","version":1,"name":"原木小餐桌","category":"餐桌","model":"YM-120","price_cny":1599,"width_cm":120,"color":"原木色","material":"橡木","style":"日式","synthetic":true,"image":"/products/T01.png"},
+  {"id":"T02","version":1,"name":"原木大餐桌","category":"餐桌","model":"YM-160","price_cny":2499,"width_cm":160,"color":"原木色","material":"橡木","style":"日式","synthetic":true,"image":"/products/T02.png"},
+  {"id":"C01","version":1,"name":"轻风休闲椅","category":"休闲椅","model":"QF-70","price_cny":899,"width_cm":70,"color":"米白","material":"布艺","style":"简约","synthetic":true,"image":"/products/C01.png"},
+  {"id":"B01","version":1,"name":"暖木床架","category":"床架","model":"NM-150","price_cny":1999,"width_cm":150,"color":"原木色","material":"松木","style":"日式","synthetic":true,"image":"/products/B01.png"},
+  {"id":"G01","version":1,"name":"青石四门柜","category":"柜","model":"QS-180","price_cny":3299,"width_cm":180,"color":"浅灰","material":"板材","style":"现代","synthetic":true,"image":"/products/G01.png"},
+  {"id":"G02","version":1,"name":"暖白斗柜","category":"柜","model":"NW-80","price_cny":2699,"width_cm":80,"color":"米白","material":"板材","style":"现代","synthetic":true,"image":"/products/G02.png"},
+  {"id":"G03","version":1,"name":"原木电视柜","category":"柜","model":"YM-TV160","price_cny":2899,"width_cm":160,"color":"原木色","material":"橡木","style":"日式","synthetic":true,"image":"/products/G03.png"},
+  {"id":"K01","version":1,"name":"米白床头柜","category":"柜","model":"BX-45","price_cny":2588,"width_cm":45,"color":"米白","material":"板材","style":"北欧","synthetic":true,"image":"/products/K01.png"},
+  {"id":"B02","version":1,"name":"云岚双人床","category":"床架","model":"YL-180","price_cny":3599,"width_cm":180,"color":"米白","material":"橡木","style":"简约","synthetic":true,"image":"/products/B02.png"},
+  {"id":"B03","version":1,"name":"深灰软包床","category":"床架","model":"RH-200","price_cny":4299,"width_cm":200,"color":"深灰","material":"布艺","style":"轻奢","synthetic":true,"image":"/products/B03.png"},
+  {"id":"C02","version":1,"name":"胡桃休闲椅","category":"休闲椅","model":"HT-60","price_cny":2599,"width_cm":60,"color":"原木色","material":"胡桃木","style":"复古","synthetic":true,"image":"/products/C02.png"},
+  {"id":"C03","version":1,"name":"墨绿餐椅","category":"休闲椅","model":"ML-45","price_cny":2688,"width_cm":45,"color":"深绿","material":"布艺","style":"中式","synthetic":true,"image":"/products/C03.png"},
+  {"id":"T03","version":1,"name":"岩板餐桌","category":"餐桌","model":"YB-180","price_cny":4599,"width_cm":180,"color":"浅灰","material":"岩板","style":"现代","synthetic":true,"image":"/products/T03.png"},
+  {"id":"T04","version":1,"name":"深棕胡桃长桌","category":"餐桌","model":"HH-200","price_cny":5299,"width_cm":200,"color":"深棕","material":"胡桃木","style":"轻奢","synthetic":true,"image":"/products/T04.png"},
+  {"id":"S05","version":1,"name":"云海三人沙发","category":"沙发","model":"YH-240","price_cny":5699,"width_cm":240,"color":"米白","material":"布艺","style":"现代","synthetic":true,"image":"/products/S05.png"},
+  {"id":"S06","version":1,"name":"深蓝转角沙发","category":"沙发","model":"ML-280","price_cny":6899,"width_cm":280,"color":"深蓝","material":"布艺","style":"现代","synthetic":true,"image":"/products/S06.png"}
+]

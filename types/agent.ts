@@ -56,7 +56,120 @@ export interface RagPolicyAnswer {
   relatedProducts: RagRelatedProductItem[];
 }
 
-export type AgentStructuredBlock = MomentsGenerationResult | RagPolicyAnswer;
+export interface GuideTurnBlock {
+  scene: "guide_turn";
+  customerId: string;
+  customerName: string;
+  revision: number;
+  constraints?: {
+    budget_max_cny: number | null;
+    width_max_cm: number | null;
+    category: string | null;
+    color: string | null;
+    exclude_material: string | null;
+    style?: string | null;
+  };
+  constraintTags?: {
+    field: string;
+    value: string | number;
+    label: string;
+    strength: "hard" | "prefer";
+    locked: boolean;
+  }[];
+  probe?: {
+    needsConfirm?: boolean;
+    field?: string;
+    label: string;
+    ids: string[];
+    count: number;
+    options?: { field: string; label: string; count: number }[];
+  } | null;
+  basis?: string;
+  mode: "simulation" | "live";
+  products: {
+    id: string;
+    name: string;
+    model: string;
+    category: string;
+    price_cny: number;
+    color?: string;
+    width_cm?: number;
+    material?: string;
+    style?: string;
+    image?: string;
+    promoUse?: string;
+    detailNote?: string;
+    reason: string;
+    failed: boolean;
+  }[];
+  confirmedName: string | null;
+  confirmedId?: string | null;
+  confirmedFacts?: {
+    id: string;
+    name: string;
+    model: string;
+    price_cny: number;
+    width_cm: number;
+    color: string;
+    material: string;
+    style?: string;
+    promoNote: string;
+  } | null;
+  catalog?: {
+    id: string;
+    name: string;
+    model: string;
+    category: string;
+    price_cny: number;
+    width_cm: number;
+    color: string;
+    material: string;
+    style: string;
+    image: string;
+    promoNote: string;
+  }[];
+  offerSwitch?: boolean;
+  pendingQuestion?: string | null;
+  material?: {
+    bodyTitle: string;
+    bodyText: string;
+    pendingReview: boolean;
+    reviewNote: string;
+    generatedImageUrl: string;
+  } | null;
+  copyText: string | null;
+  copySimulation: boolean;
+  promotions: { id: string; discount_cny: number; stack_with?: string[] }[];
+  promoPlan?: {
+    note: string;
+    use: { id: string; discount_cny: number }[];
+    excluded: { id: string; reason: string }[];
+  } | null;
+  image: { label: string; called: boolean } | null;
+  reflection: {
+    pending_review: boolean;
+    note: string;
+    checks: { name: string; ok: boolean; detail: string }[];
+  };
+  process?: {
+    workflow: { step: string; why: string; status: string };
+    rag: { hit: boolean; title: string; excerpt: string };
+    agent: { did: string; cannot: string };
+    usage?: {
+      retrieve: { used: number; limit: number };
+      product_decision: { used: number; limit: number };
+      content: { used: number; limit: number };
+      image: { used: number; limit: number };
+    };
+    clarify?: { doubt: string; rounds: number; limit: number; capped: boolean }[];
+    failure?: { kind: string; text: string } | null;
+    degraded?: string[];
+  } | null;
+  memories: { customer: { id: string; key: string; value: string; verified: boolean }[] };
+  guideTone: string | null;
+}
+
+export type AgentStructuredBlock = MomentsGenerationResult | RagPolicyAnswer | GuideTurnBlock;
 
 export interface AgentChatMessagePayload {
   role: "user" | "assistant" | "system";
@@ -67,6 +180,7 @@ export interface AgentChatRequestBody {
   scene: AgentScene;
   messages: AgentChatMessagePayload[];
   sessionId?: string;
+  customerId?: string;
   /** 场景一：随请求提交的配置 */
   momentsInput?: MomentsGenerationInput;
   /** 场景二：多模态占位说明（如已选图片文件名） */
@@ -81,6 +195,9 @@ export interface AgentChatResponseBody {
 }
 
 export function stringifyStructuredBlock(s: AgentStructuredBlock): string {
+  if (s.scene === "guide_turn") {
+    return [s.customerName, s.copyText || "", s.reflection?.note || ""].filter(Boolean).join("\n");
+  }
   if (s.scene === "moments_marketing") {
     const lines = [
       "【场景】朋友圈营销（AIGC）",

@@ -13,7 +13,7 @@ const notoSansSc = Noto_Sans_SC({
 
 export const metadata: Metadata = {
   title: "AI导购助手 · 门店 H5 演示",
-  description: "面向门店导购/店长的 AI 助手演示：朋友圈营销生成、政策 RAG 查询、会话与收藏。",
+  description: "移动端导购助手：选品、确认商品、话术、配图占位、反思和记忆。默认演示回放。",
 };
 
 /** 移动端 H5：按设备宽度，刘海屏用 safe-area */

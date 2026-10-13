@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAppSettings } from "@/hooks/useAppSettings";
 import { getFollowUpOverride } from "@/lib/managerInsightsStorage";
 import { deleteSession, listSessions } from "@/lib/sessions";
-import { listFavorites, removeFavoriteById } from "@/lib/favorites";
+import { listFavorites, mergeServerFavorites, removeFavoriteById } from "@/lib/favorites";
 import type { FavoriteRecord } from "@/types/session";
 import { storeSessionSummariesMock } from "@/mock/storeInsights";
 import type { SessionCenterScope, StoreSessionSummaryItem } from "@/types/store-insights";
@@ -19,6 +19,29 @@ import { StoreInsightsDashboard } from "@/components/sessions/StoreInsightsDashb
 import { StoreSessionDetailDrawer } from "@/components/sessions/StoreSessionDetailDrawer";
 import { StoreSessionSummaryList } from "@/components/sessions/StoreSessionSummaryList";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+
+function productKey(item: FavoriteRecord) {
+  const block = item.structured;
+  if (block?.scene === "guide_turn") return block.confirmedFacts?.name || block.confirmedName || block.confirmedFacts?.id || item.title;
+  return item.title;
+}
+
+function splitFavorites(items: FavoriteRecord[]) {
+  const products: FavoriteRecord[] = [];
+  const materials: FavoriteRecord[] = [];
+  const seen = new Set<string>();
+  for (const item of items) {
+    if (item.type === "product") {
+      const key = productKey(item);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      products.push(item);
+    } else if (item.type === "material" || item.type === "moments_card") {
+      materials.push(item);
+    }
+  }
+  return { products, materials };
+}
 
 function SessionsCenterSkeleton() {
   return (
@@ -80,7 +103,7 @@ export function SessionsCenterView({ onToast }: SessionsCenterViewProps) {
 
   const favorites = useMemo(() => {
     void tick;
-    return listFavorites();
+    return listFavorites().filter((item) => item.type === "product" || item.type === "material" || item.type === "moments_card");
   }, [tick]);
 
   const mergedSummaries: StoreSessionSummaryItem[] = useMemo(() => {
@@ -97,6 +120,16 @@ export function SessionsCenterView({ onToast }: SessionsCenterViewProps) {
   );
 
   const refresh = useCallback(() => setTick((t) => t + 1), []);
+
+  useEffect(() => {
+    void fetch("/api/guide/act")
+      .then((response) => response.json())
+      .then((payload) => {
+        mergeServerFavorites(payload.favorites || []);
+        refresh();
+      })
+      .catch(() => undefined);
+  }, [refresh]);
 
   const handleDeleteSession = useCallback(
     (id: string) => {
@@ -196,22 +229,53 @@ export function SessionsCenterView({ onToast }: SessionsCenterViewProps) {
                 ) : favorites.length === 0 ? (
                   <EmptyState
                     title="暂无收藏"
-                    description="在对话里打开一条 AI 回复，点击星标即可收藏内容。"
+                    description="在商品卡上点收藏，之后可以在这里直接生成素材。"
                     icon="star"
                     action={{ label: "进入对话去收藏", href: "/chat" }}
                   />
                 ) : (
-                  <ul className="space-y-2.5 pb-6">
-                    {favorites.map((f) => (
-                      <FavoriteListItem
-                        key={f.id}
-                        item={f}
-                        onOpen={setDrawerItem}
-                        onRemove={handleRemoveFavorite}
-                        onCopy={copyPlain}
-                      />
-                    ))}
-                  </ul>
+                  <div className="space-y-4 pb-6">
+                    <section>
+                      <h2 className="px-1 text-[0.85rem] font-bold text-slate-900">商品</h2>
+                      <p className="mt-1 px-1 text-[0.78rem] leading-relaxed text-slate-600">同一件只留最近一条。主按钮是「用这件生成素材」。</p>
+                      {splitFavorites(favorites).products.length === 0 ? (
+                        <p className="mt-2 px-1 text-[0.78rem] text-slate-500">还没有收藏商品。</p>
+                      ) : (
+                        <ul className="mt-2 space-y-2.5">
+                          {splitFavorites(favorites).products.map((f) => (
+                            <FavoriteListItem
+                              key={f.id}
+                              group="product"
+                              item={f}
+                              onOpen={setDrawerItem}
+                              onRemove={handleRemoveFavorite}
+                              onCopy={copyPlain}
+                            />
+                          ))}
+                        </ul>
+                      )}
+                    </section>
+                    <section>
+                      <h2 className="px-1 text-[0.85rem] font-bold text-slate-900">素材</h2>
+                      <p className="mt-1 px-1 text-[0.78rem] leading-relaxed text-slate-600">这里只查看和复制，不会拿去换一件商品。</p>
+                      {splitFavorites(favorites).materials.length === 0 ? (
+                        <p className="mt-2 px-1 text-[0.78rem] text-slate-500">还没有收藏素材。</p>
+                      ) : (
+                        <ul className="mt-2 space-y-2.5">
+                          {splitFavorites(favorites).materials.map((f) => (
+                            <FavoriteListItem
+                              key={f.id}
+                              group="material"
+                              item={f}
+                              onOpen={setDrawerItem}
+                              onRemove={handleRemoveFavorite}
+                              onCopy={copyPlain}
+                            />
+                          ))}
+                        </ul>
+                      )}
+                    </section>
+                  </div>
                 )}
               </div>
             </>

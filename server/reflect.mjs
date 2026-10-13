@@ -1,0 +1,77 @@
+import catalog from '../data/catalog.json' with { type: 'json' };
+import promotions from '../data/promotions.json' with { type: 'json' };
+
+const LIGHT = ['米白', '浅灰'];
+const FORBIDDEN = ['终身保修', '免费送装', '环保', '舒适', '终身质保'];
+const TODAY = '2026-10-06';
+
+export function reflect(state) {
+  const checks = [];
+  const constraints = state?.constraints || {};
+  const ids = state?.confirmed_product_id ? [state.confirmed_product_id] : (state?.candidate_ids || []);
+  for (const id of ids) {
+    const product = catalog.find(item => item.id === id);
+    if (!product) {
+      checks.push({target: id, name: '商品资料', ok: false, detail: '资料里没有这件商品'});
+      continue;
+    }
+    if (constraints.budget_max_cny != null) {
+      checks.push({target: id, name: '预算', ok: product.price_cny <= constraints.budget_max_cny, detail: `${product.name}标价${product.price_cny}，上限${constraints.budget_max_cny}`});
+    }
+    if (constraints.width_max_cm != null) {
+      checks.push({target: id, name: '宽度', ok: product.width_cm <= constraints.width_max_cm, detail: `${product.width_cm}厘米，上限${constraints.width_max_cm}厘米`});
+    }
+    if (constraints.category) {
+      checks.push({target: id, name: '品类', ok: product.category === constraints.category, detail: product.category});
+    }
+    if (constraints.color === '浅色') {
+      checks.push({target: id, name: '颜色', ok: LIGHT.includes(product.color), detail: product.color});
+    } else if (constraints.color) {
+      checks.push({target: id, name: '颜色', ok: product.color === constraints.color, detail: product.color});
+    }
+    if (constraints.exclude_material) {
+      checks.push({target: id, name: '材质', ok: product.material !== constraints.exclude_material, detail: product.material});
+    }
+  }
+  if (state?.confirmed_product_id && state.card?.promotions) {
+    for (const promo of state.card.promotions) {
+      const source = promotions.find(item => item.id === promo.id);
+      const ok = Boolean(source && source.products.includes(state.confirmed_product_id) && source.start <= TODAY && source.end >= TODAY);
+      checks.push({target: promo.id, name: '活动', ok, detail: ok ? `${promo.id}在有效期内` : `${promo.id}不能当成有效活动`});
+    }
+  }
+  const listed = state?.card?.promotions || [];
+  if (listed.length > 1) {
+    const conflicts = [];
+    for (let i = 0; i < listed.length; i += 1) {
+      for (let j = i + 1; j < listed.length; j += 1) {
+        const left = listed[i];
+        const right = listed[j];
+        const stacks = left.stack_with?.includes(right.id) && right.stack_with?.includes(left.id);
+        if (!stacks) conflicts.push(left.id + '和' + right.id);
+      }
+    }
+    checks.push({
+      target: 'stack',
+      name: '活动叠加',
+      ok: conflicts.length === 0,
+      detail: conflicts.length ? conflicts.join('、') + '不能叠加，不能说成可以一起使用' : '列出的活动可以互相叠加'
+    });
+  }
+  if (state?.card?.text) {
+    const hits = FORBIDDEN.filter(item => state.card.text.includes(item));
+    checks.push({target: 'copy', name: '话术事实', ok: hits.length === 0, detail: hits.length ? '出现无依据承诺：' + hits.join('、') : '话术没有写入无依据承诺'});
+  }
+  const failed = checks.filter(item => !item.ok);
+  return {
+    blind: true,
+    used_prior_conclusion: false,
+    passed: checks.length > 0 && failed.length === 0,
+    pending_review: failed.length > 0,
+    failed_targets: [...new Set(failed.map(item => item.target))],
+    checks,
+    note: checks.length
+      ? (failed.length ? '核查未通过。这些结果保持待核对，不能说成已通过。' : '规则通过仍待人工核对。') + '本轮只对照约束和资料，没有沿用上一轮结论。'
+      : '还没有可核查的商品。'
+  };
+}

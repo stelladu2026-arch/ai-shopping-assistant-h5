@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+
+const html = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
+const css = readFileSync(new URL('../public/app.css', import.meta.url), 'utf8');
+assert.match(html, /name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/);
+assert.equal(html.includes('1140px'), false);
+assert.match(css, /width:\s*min\(100vw,\s*430px\)/);
+assert.match(css, /env\(safe-area-inset-bottom\)/);
+assert.match(css, /env\(safe-area-inset-top\)/);
+assert.match(css, /min-height:\s*44px/);
+assert.equal(/grid-template-columns:\s*repeat\([3-9]/.test(css), false);
+assert.equal(css.includes('1140px'), false);
+console.log('ok h5 layout constraints');

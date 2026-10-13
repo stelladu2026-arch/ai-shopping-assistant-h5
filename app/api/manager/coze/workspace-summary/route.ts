@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server";
-import { fetchPublishedBotsSummary } from "@/lib/cozeOpenApi";
 
-/**
- * 店长端：探测 Coze 开放平台 PAT + Workspace 是否可用，并返回已发布 Bot 数量（不落密钥到前端）。
- */
+/** 不再调用 Coze。店长看板只返回本地说明。 */
 export async function GET() {
-  const summary = await fetchPublishedBotsSummary();
-  /** 始终 200，便于脚本拉 JSON；是否成功看 body.ok */
-  return NextResponse.json(summary);
+  return NextResponse.json({
+    ok: false,
+    status: "disabled",
+    error: "已去掉 Coze。本页不请求外部工作流。",
+  });
 }
