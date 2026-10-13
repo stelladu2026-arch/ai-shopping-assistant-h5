@@ -38,12 +38,12 @@ export function RagComposerBar({
             disabled={disabled || sending}
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter") {
+              if (e.key === "Enter" && !e.nativeEvent.isComposing) {
                 e.preventDefault();
                 if (!disabled && !sending && value.trim()) onSend();
               }
             }}
-            placeholder="说说预算、宽度、颜色或材质"
+            placeholder="说需求，或问商品参数、售后政策"
             className="min-h-0 min-w-0 flex-1 border-0 bg-transparent py-0 text-[0.88rem] font-medium text-slate-900 outline-none placeholder:text-slate-400 disabled:opacity-60"
           />
           <input
@@ -90,7 +90,7 @@ export function RagComposerBar({
           </button>
         </div>
         {fileName ? (
-          <p className="mt-1 text-[0.65rem] font-medium text-brand-800">已选凭证：{fileName}</p>
+          <p className="mt-1 text-[0.65rem] font-medium text-brand-800">已选图片：{fileName}（尚未识别图片内容）</p>
         ) : null}
       </div>
     </div>

@@ -1,3 +1,5 @@
+> 历史文档：当前 guide-agent 主线使用 Next.js + 服务端 SQLite，请先看 README.md 和 docs/IMPLEMENTATION-AUDIT-2026-10-13.md。以下旧 Coze / 纯前端 / 部署流程尚未按当前版本验收。
+
 # 演示说明（本地 MVP）
 
 面向门店导购 / 店长场景的 H5 前端演示工程，数据默认落在浏览器 **localStorage**。

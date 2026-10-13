@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-const file = path.join(process.cwd(), "data", "guide.sqlite");
+const file = process.env.GUIDE_DB_PATH || path.join(process.cwd(), "data", "guide.sqlite");
 
 function database() {
   if (!globalThis.__guideSqlite) {
@@ -205,7 +205,7 @@ export function loadStep(sessionId, stepKey) {
 }
 
 export function loadSteps(sessionId) {
-  const keys = ["route", "product_decision", "content", "coordinate", "research"];
+  const keys = ["route", "product_decision", "content", "knowledge", "coordinate", "research"];
   return Object.fromEntries(keys.map((key) => [key, loadStep(sessionId, key)]));
 }
 

@@ -1,0 +1,252 @@
+[
+  {
+    "file": "云岚双人床.md",
+    "storeId": "demo",
+    "productIds": [
+      "B02"
+    ],
+    "version": "demo-1",
+    "reviewStatus": "demo",
+    "validFrom": null,
+    "validTo": null,
+    "claimKey": "B02"
+  },
+  {
+    "file": "云朵双人沙发.md",
+    "storeId": "demo",
+    "productIds": [
+      "S01"
+    ],
+    "version": "demo-1",
+    "reviewStatus": "demo",
+    "validFrom": null,
+    "validTo": null,
+    "claimKey": "S01"
+  },
+  {
+    "file": "云朵小双人沙发.md",
+    "storeId": "demo",
+    "productIds": [
+      "S02"
+    ],
+    "version": "demo-1",
+    "reviewStatus": "demo",
+    "validFrom": null,
+    "validTo": null,
+    "claimKey": "S02"
+  },
+  {
+    "file": "云朵皮质沙发.md",
+    "storeId": "demo",
+    "productIds": [
+      "S03"
+    ],
+    "version": "demo-1",
+    "reviewStatus": "demo",
+    "validFrom": null,
+    "validTo": null,
+    "claimKey": "S03"
+  },
+  {
+    "file": "云海三人沙发.md",
+    "storeId": "demo",
+    "productIds": [
+      "S05"
+    ],
+    "version": "demo-1",
+    "reviewStatus": "demo",
+    "validFrom": null,
+    "validTo": null,
+    "claimKey": "S05"
+  },
+  {
+    "file": "原木大餐桌.md",
+    "storeId": "demo",
+    "productIds": [
+      "T02"
+    ],
+    "version": "demo-1",
+    "reviewStatus": "demo",
+    "validFrom": null,
+    "validTo": null,
+    "claimKey": "T02"
+  },
+  {
+    "file": "原木小餐桌.md",
+    "storeId": "demo",
+    "productIds": [
+      "T01"
+    ],
+    "version": "demo-1",
+    "reviewStatus": "demo",
+    "validFrom": null,
+    "validTo": null,
+    "claimKey": "T01"
+  },
+  {
+    "file": "原木电视柜.md",
+    "storeId": "demo",
+    "productIds": [
+      "G03"
+    ],
+    "version": "demo-1",
+    "reviewStatus": "demo",
+    "validFrom": null,
+    "validTo": null,
+    "claimKey": "G03"
+  },
+  {
+    "file": "售后说明.md",
+    "storeId": "demo",
+    "productIds": [],
+    "version": "demo-1",
+    "reviewStatus": "demo",
+    "validFrom": null,
+    "validTo": null,
+    "claimKey": "after-sales"
+  },
+  {
+    "file": "墨绿餐椅.md",
+    "storeId": "demo",
+    "productIds": [
+      "C03"
+    ],
+    "version": "demo-1",
+    "reviewStatus": "demo",
+    "validFrom": null,
+    "validTo": null,
+    "claimKey": "C03"
+  },
+  {
+    "file": "岩板餐桌.md",
+    "storeId": "demo",
+    "productIds": [
+      "T03"
+    ],
+    "version": "demo-1",
+    "reviewStatus": "demo",
+    "validFrom": null,
+    "validTo": null,
+    "claimKey": "T03"
+  },
+  {
+    "file": "暖木床架.md",
+    "storeId": "demo",
+    "productIds": [
+      "B01"
+    ],
+    "version": "demo-1",
+    "reviewStatus": "demo",
+    "validFrom": null,
+    "validTo": null,
+    "claimKey": "B01"
+  },
+  {
+    "file": "暖白斗柜.md",
+    "storeId": "demo",
+    "productIds": [
+      "G02"
+    ],
+    "version": "demo-1",
+    "reviewStatus": "demo",
+    "validFrom": null,
+    "validTo": null,
+    "claimKey": "G02"
+  },
+  {
+    "file": "林间三人沙发.md",
+    "storeId": "demo",
+    "productIds": [
+      "S04"
+    ],
+    "version": "demo-1",
+    "reviewStatus": "demo",
+    "validFrom": null,
+    "validTo": null,
+    "claimKey": "S04"
+  },
+  {
+    "file": "深棕胡桃长桌.md",
+    "storeId": "demo",
+    "productIds": [
+      "T04"
+    ],
+    "version": "demo-1",
+    "reviewStatus": "demo",
+    "validFrom": null,
+    "validTo": null,
+    "claimKey": "T04"
+  },
+  {
+    "file": "深灰软包床.md",
+    "storeId": "demo",
+    "productIds": [
+      "B03"
+    ],
+    "version": "demo-1",
+    "reviewStatus": "demo",
+    "validFrom": null,
+    "validTo": null,
+    "claimKey": "B03"
+  },
+  {
+    "file": "深蓝转角沙发.md",
+    "storeId": "demo",
+    "productIds": [
+      "S06"
+    ],
+    "version": "demo-1",
+    "reviewStatus": "demo",
+    "validFrom": null,
+    "validTo": null,
+    "claimKey": "S06"
+  },
+  {
+    "file": "米白床头柜.md",
+    "storeId": "demo",
+    "productIds": [
+      "K01"
+    ],
+    "version": "demo-1",
+    "reviewStatus": "demo",
+    "validFrom": null,
+    "validTo": null,
+    "claimKey": "K01"
+  },
+  {
+    "file": "胡桃休闲椅.md",
+    "storeId": "demo",
+    "productIds": [
+      "C02"
+    ],
+    "version": "demo-1",
+    "reviewStatus": "demo",
+    "validFrom": null,
+    "validTo": null,
+    "claimKey": "C02"
+  },
+  {
+    "file": "轻风休闲椅.md",
+    "storeId": "demo",
+    "productIds": [
+      "C01"
+    ],
+    "version": "demo-1",
+    "reviewStatus": "demo",
+    "validFrom": null,
+    "validTo": null,
+    "claimKey": "C01"
+  },
+  {
+    "file": "青石四门柜.md",
+    "storeId": "demo",
+    "productIds": [
+      "G01"
+    ],
+    "version": "demo-1",
+    "reviewStatus": "demo",
+    "validFrom": null,
+    "validTo": null,
+    "claimKey": "G01"
+  }
+]

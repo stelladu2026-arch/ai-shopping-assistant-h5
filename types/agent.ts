@@ -49,6 +49,11 @@ export interface RagRelatedProductItem {
 export interface RagPolicyAnswer {
   scene: "store_rag_query";
   policyTitle: string;
+  answerStatus?: "found" | "partial" | "not_found" | "conflict" | "needs_clarification";
+  retrievalMode?: string;
+  synthetic?: boolean;
+  checkedOn?: string;
+  sources?: {id: string; title: string; source: string; section: string; excerpt: string; version: string; validFrom: string | null; validTo: string | null}[];
   priceHighlights: { label: string; value: string }[];
   conditions: string[];
   activityDeadline: string;

@@ -9,7 +9,7 @@ interface SceneModeSwitchProps {
 
 export function SceneModeSwitch({ value, onChange }: SceneModeSwitchProps) {
   const items: { id: AgentScene; label: string }[] = [
-    { id: "store_rag_query", label: "选品推荐" },
+    { id: "store_rag_query", label: "选品 / 查知识" },
     { id: "moments_marketing", label: "素材生成" },
   ];
   return (

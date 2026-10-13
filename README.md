@@ -1,43 +1,46 @@
-# 导购 Agent
+# 家居导购 Agent · 移动端 H5
 
-独立于产品机会研究仓库的移动端 H5。默认演示回放，不调用真实模型。
+主线是 Next.js 手机 H5：选品、知识查询、素材生成、会话和收藏。默认用模拟商品及本地规则验证流程，**不是已验收的模型自主 Agent**。
 
-## 启动
+## 启动当前主线
 
-```bash
-node server/index.mjs
-```
-
-浏览器打开 http://127.0.0.1:4173 。这是手机宽度的单列 H5：首页、会话中心、对话页和设置。内容宽最多 430px。
-
-检查：
+需要 Node.js 22.13 或以上（本轮用 Node.js 24.19.0 验证；SQLite 使用 `node:sqlite`）。
 
 ```bash
-node tests/guide-rules.mjs
-node tests/model-config.mjs
-node tests/h5-layout.mjs
+npm ci
+npm run dev
 ```
 
-## API Key 填写位置
+本机打开 http://localhost:3000 。配置复制 `.env.example` 为 `.env.local`，离线体验无需填写密钥，保留模型开关关闭。开发服务默认监听局域网；当前没有服务端身份鉴权，仅限可信演示环境。
 
-复制 `.env.example` 为同目录 `.env`，只填写服务端变量：
+可以顺序体验：
 
-- `DASHSCOPE_API_KEY`
-- `QWEN_FREE_TIER_ONLY_CONFIRMED`（确认免费额度用完即停已生效后才改为 `true`）
-- `GUIDE_AGENT_LIVE_MODEL`（要允许真实生文时才改为 `true`）
-- `IMAGE_API_BASE`、`IMAGE_MODEL`、`IMAGE_API_KEY`（生图，可与生文密钥分开；留空则只回放占位图）
+1. 输入“浅色沙发，预算3000元，宽度不超过180厘米，不要皮质”，点选具体商品。
+2. 输入“这款保修多久？”或“S01材质是什么？”，查看引用原文。
+3. 输入“S02能不能机洗？”——没有依据时应说明缺资料。
+4. 切换素材生成，沿用已确认商品生成演示文案。
 
-网页没有密钥输入框。生文三项同时满足才会请求文案模型。生图三项都有值才会请求图像接口。商品筛选和活动是否有效仍由本地代码判断。
+“选品 / 查知识”共用自然语言入口；知识问题不会强制先走选品。当前知识检索为主题关键词、SKU 和资料范围过滤，回答为原文摘录；语义检索、模型组织回答尚未完成。
 
-记忆要在页面上点「记住」才会写入，并标成未验证。反思每轮对照预算、尺寸、品类和活动重新核查，不沿用上一轮结论。
+## 费用边界与未完成项
 
-## 与产品机会研究一致的接口
+- 默认不调用文字或图片模型。当前 Next.js 内容节点仍输出模板，文字适配器尚未连入该节点；仅填开关不代表真实生文完成。
+- `DASHSCOPE_API_KEY`、`GUIDE_AGENT_LIVE_MODEL`、`QWEN_FREE_TIER_ONLY_CONFIRMED` 是已有文字适配器配置。免费额度确认值是操作声明，代码不会查询供应商余额。
+- 图片密钥及 `GUIDE_IMAGE_LIVE_ENABLED=true` **不足以发起付费生成**，还需要服务端对具体单张计划的确认。当前 H5 尚未接通这一步，返回未调用的预览状态；不把占位图当成生成图。
+- 模型名和地址保留已有配置，不代表本次已核实模型权限、价格或额度。密钥只留在服务端。
 
-地址和模型名与 `jianwei-cursor-handoff-20261005/source/lib/research/provider-config.ts` 相同：
+完整核查、已修复问题及优先级见 [实际完成度与后续计划](docs/IMPLEMENTATION-AUDIT-2026-10-13.md)。
 
-- Base URL：`https://llm-feayjgruj6xxgtqa.cn-beijing.maas.aliyuncs.com/compatible-mode/v1`
-- 请求：`POST {Base URL}/chat/completions`
-- 模型：`qwen3.7-plus`
-- `stream: false`，`enable_thinking: false`，Bearer 密钥，严格 JSON Schema
+## 验证
 
-商品筛选、预算边界和活动是否有效由本地代码决定。模型只在上述开关打开后参与已确认商品的文案，失败时不会把演示稿说成模型结果。
+```bash
+npm test
+npm run typecheck
+npm run build
+```
+
+测试只使用本地资料与模拟网络响应，不产生模型费用。新增测试直接调用当前 H5 的 Next.js 路由，覆盖知识分流、引用、未知资料、门店/日期范围、冲突、商品保持和生图确认。
+
+## 历史演示入口
+
+`node server/index.mjs` → http://127.0.0.1:4173 为早期演示服务，仅作旧规则回归。它不是当前主线，未包含新知识节点。`README-demo.md` 与 `DEPLOY-DEMO.md` 保留历史记录；其中 Coze 回退、纯前端存储和直接 Vercel 发布描述不适用于当前 SQLite 主线，部署前需重新设计持久化与权限。

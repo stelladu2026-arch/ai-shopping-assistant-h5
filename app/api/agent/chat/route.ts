@@ -17,7 +17,11 @@ export async function POST(req: Request) {
     const payload: AgentChatResponseBody = {
       messageId: `material_${Date.now()}`,
       done: true,
-      leadText: failed ? structured.bodyText : "素材已生成，请核对后再复制发给顾客。",
+      leadText: failed ? structured.bodyText : structured.outputKind === "image_only" && !structured.generatedImageUrl
+        ? (structured.imageSuggestion || "图片尚未生成，未调用生图接口。")
+        : structured.outputKind === "rich" && !structured.generatedImageUrl
+          ? "演示文案已准备，图片尚未生成。请先核对文案。"
+          : "素材已生成，请核对后再复制发给顾客。",
       structured,
     };
     return NextResponse.json(payload);
@@ -32,11 +36,12 @@ export async function POST(req: Request) {
   if (!result.ok) {
     return NextResponse.json(result, { status: 409 });
   }
+  if (!("structured" in result)) return NextResponse.json({error:"unexpected_result"}, {status:500});
   const payload: AgentChatResponseBody = {
     messageId: `guide_${Date.now()}`,
     done: true,
     leadText: result.leadText || undefined,
-    structured: result.structured,
+    structured: result.structured as AgentChatResponseBody["structured"],
   };
   return NextResponse.json(payload);
 }
