@@ -1,9 +1,10 @@
 // @ts-nocheck
 import { executeImage } from "./image";
 import { consumeCall, loadStep, saveStep } from "./db";
-import { LIMITS, capText, FAILURE_TEXT } from "./limits";
+import { DEGRADE_TEXT, LIMITS, capText, FAILURE_TEXT } from "./limits";
 import { degradeLine, sealFacts } from "./facts";
 
+// 内容节点不检索门店资料，也不调用飞书同步。资料只使用商品决策已经读过的摘录。
 const STYLE_LABEL = { urgent: "限时抢购", warm: "温情居家", pro: "专业科普", redbook: "种草笔记" };
 const AUDIENCE_LABEL = { first_home: "首置年轻", upgrade: "家庭改善", luxury: "高端定制" };
 const UNSUPPORTED_POINTS = ["环保材质", "包送装", "质保无忧", "终身保修", "免费送装"];
@@ -61,9 +62,11 @@ export async function runContentNode(session, request) {
       },
       facts.promoPlan,
     );
-    const factLine = facts.sourceExcerpt
-      ? `门店资料《${facts.sourceTitle}》：${facts.sourceExcerpt}`
-      : "这件商品没有筛选资料，不能编造说明。";
+    const factLine = facts.sourceConflict
+      ? `门店资料与商品目录不一致。${DEGRADE_TEXT}`
+      : facts.sourceExcerpt
+        ? `门店资料《${facts.sourceTitle}》：${facts.sourceExcerpt}`
+        : "这件商品没有筛选资料，不能编造说明。";
     const bodyText = [
       factLine,
       facts.promoPlan?.note || "",
@@ -78,9 +81,14 @@ export async function runContentNode(session, request) {
     let imageCapped = false;
     let imageNetwork = false;
     if (wantsImage) {
-      const generated = await executeImage(facts, process.env, fetch, session.id);
+      let generated;
+      try {
+        generated = await executeImage(facts, process.env, fetch, session.id);
+      } catch {
+        generated = {simulation: true, called: false, quota: true, label: "演示回放、待核对"};
+      }
       imageCapped = Boolean(generated.capped);
-      imageNetwork = Boolean(generated.network);
+      imageNetwork = Boolean(generated.network) && !generated.quota;
       session.record.image = {
         simulation: true,
         called: Boolean(generated.called),

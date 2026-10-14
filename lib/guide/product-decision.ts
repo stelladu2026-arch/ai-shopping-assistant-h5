@@ -1,34 +1,82 @@
 // @ts-nocheck
 import promotions from "../../data/promotions.json";
 import { confirmFromCatalog, confirmProduct, productById, resolveConstraintSearch } from "./engine";
-import { retrieve } from "./knowledge";
+import { degradeStoreReason, formatStoreHit, MISS_TEXT, retrieve, storeExcerptConflicts } from "./knowledge";
 import { buildPromoPlan } from "./promos";
 import { consumeCall, loadStep, saveStep } from "./db";
 import { LIMITS, capText } from "./limits";
 
 const STEP = "product_decision";
+let latestRetrieveTrace = null;
 
-export function lookupStoreDoc(query) {
-  const hit = retrieve(query);
+export async function lookupStoreDoc(query) {
+  const hit = await retrieve(query);
   return {
     ok: true,
     found: Boolean(hit),
     source: hit?.source || null,
-    text: hit ? `门店资料《${hit.title}》：${hit.excerpt}` : "没有检索到门店资料，不能编造说明。",
+    text: formatStoreHit(hit),
   };
 }
 
-function readStore(sessionId, query) {
+async function readStore(sessionId, query) {
   const gate = consumeCall(sessionId, "retrieve", LIMITS.retrieve);
   if (!gate.ok) return { capped: true, hit: null };
-  return { capped: false, hit: retrieve(query) };
+  const hit = await retrieve(query);
+  latestRetrieveTrace = retrieve.lastTrace || null;
+  return { capped: false, hit };
 }
 
-function factsFor(sessionId, productId, plan) {
+export async function answerStoreDoc(sessionId, query, options = {}) {
+  const gate = consumeCall(sessionId, "retrieve", LIMITS.retrieve);
+  if (!gate.ok) return { ok: true, found: false, capped: true, text: capText("retrieve"), trace: null };
+  const hit = await retrieve(query, options.knowledgeDir, options);
+  return {
+    ok: true,
+    found: Boolean(hit),
+    capped: false,
+    source: hit?.source || null,
+    title: hit?.title || null,
+    section: hit?.section || null,
+    text: formatStoreHit(hit),
+    trace: retrieve.lastTrace || null,
+  };
+}
+
+function explainStore(read, product) {
+  if (read.capped) return { reason: capText("retrieve"), excerpt: null, conflict: false, title: null, source: null };
+  const hit = read.hit;
+  if (!hit) {
+    return { reason: "没有检索到这件商品的门店资料，不能编造说明。", excerpt: null, conflict: false, title: null, source: null };
+  }
+  if (product && storeExcerptConflicts(hit.excerpt, product)) {
+    return { reason: degradeStoreReason(hit.title), excerpt: null, conflict: true, title: hit.title, source: hit.source };
+  }
+  return { reason: `门店资料《${hit.title}》：${hit.excerpt}`, excerpt: hit.excerpt, conflict: false, title: hit.title, source: hit.source };
+}
+
+export function applyStoreExcerpt(product, hit) {
+  const explained = explainStore({ capped: false, hit }, product);
+  return {
+    reason: explained.reason,
+    excerpt: explained.excerpt,
+    conflict: explained.conflict,
+    title: explained.title,
+    source: explained.source,
+    name: product?.name ?? null,
+    model: product?.model ?? null,
+    price_cny: product?.price_cny ?? null,
+    width_cm: product?.width_cm ?? null,
+    color: product?.color ?? null,
+    material: product?.material ?? null,
+  };
+}
+
+async function factsFor(sessionId, productId, plan) {
   const product = productById(productId);
   if (!product) return null;
-  const read = readStore(sessionId, product.name);
-  const hit = read.hit;
+  const read = await readStore(sessionId, product.name);
+  const explained = explainStore(read, product);
   const promoPlan = plan || buildPromoPlan(product.id);
   return {
     id: product.id,
@@ -41,9 +89,10 @@ function factsFor(sessionId, productId, plan) {
     category: product.category,
     style: product.style || "",
     promoPlan,
-    sourceTitle: hit?.title || null,
-    sourceExcerpt: hit?.excerpt || null,
-    sourceFile: hit?.source || null,
+    sourceTitle: explained.title,
+    sourceExcerpt: explained.excerpt,
+    sourceFile: explained.source,
+    sourceConflict: explained.conflict,
   };
 }
 
@@ -67,7 +116,8 @@ function markPending(session, reviewNote) {
   };
 }
 
-export function runProductDecision(session, request) {
+export async function runProductDecision(session, request) {
+  latestRetrieveTrace = null;
   const gate = consumeCall(session.id, "product_decision", LIMITS.product_decision);
   if (!gate.ok) {
     return { ok: true, capped: true, reply: capText("product_decision") };
@@ -81,7 +131,7 @@ export function runProductDecision(session, request) {
       : confirmProduct(session.record.state, request.productId, request.revision);
     if (!settled.ok) return { ok: false, error: settled.error || "confirm_failed" };
       session.record.state = settled.state;
-      const facts = factsFor(session.id, settled.state.confirmed_product_id, previous?.output?.plans?.[settled.state.confirmed_product_id]);
+      const facts = await factsFor(session.id, settled.state.confirmed_product_id, previous?.output?.plans?.[settled.state.confirmed_product_id]);
       if (session.record.state.card && facts?.promoPlan) {
         session.record.state.card.promotions = chosenPromotions(facts.promoPlan);
       }
@@ -96,6 +146,7 @@ export function runProductDecision(session, request) {
           plans: { ...(previous?.output?.plans || {}), [facts.id]: facts.promoPlan },
           candidateIds: session.record.state.candidate_ids || [],
           confirmedFacts: facts,
+          retrieveTrace: latestRetrieveTrace,
         },
         error: null,
       });
@@ -122,24 +173,21 @@ export function runProductDecision(session, request) {
     session.record.state.candidate_ids = probed.officialIds;
     session.record.state.probe = probed.probe;
     session.record.state.applied_preference = probed.applied;
-    const found = probed.officialIds.map((id) => {
+    const found = [];
+    for (const id of probed.officialIds) {
       const product = productById(id);
-      const read = product ? readStore(session.id, product.name) : { capped: false, hit: null };
-      const hit = read.hit;
-      return {
+      const read = product ? await readStore(session.id, product.name) : { capped: false, hit: null };
+      const explained = explainStore(read, product);
+      found.push({
         id,
         name: product?.name || "",
         model: product?.model || "",
         category: product?.category || "",
         price_cny: product?.price_cny ?? null,
-        source: hit?.source || null,
-        reason: read.capped
-          ? capText("retrieve")
-          : hit
-            ? `门店资料《${hit.title}》：${hit.excerpt}`
-            : "没有检索到这件商品的门店资料，不能编造说明。",
-      };
-    });
+        source: explained.source,
+        reason: explained.reason,
+      });
+    }
     const plans = {};
     for (const item of found) plans[item.id] = buildPromoPlan(item.id);
     const confirmedId = session.record.state.confirmed_product_id;
@@ -147,10 +195,10 @@ export function runProductDecision(session, request) {
     session.record.state.candidate_ids = candidateIds;
     let confirmedFacts = previous?.output?.confirmedFacts || null;
     if (confirmedId && candidateIds.includes(confirmedId)) {
-      confirmedFacts = factsFor(session.id, confirmedId, plans[confirmedId]);
+      confirmedFacts = await factsFor(session.id, confirmedId, plans[confirmedId]);
       if (!plans[confirmedId]) plans[confirmedId] = confirmedFacts.promoPlan;
     }
-    const output = { products: found, plans, candidateIds, confirmedFacts };
+    const output = { products: found, plans, candidateIds, confirmedFacts, retrieveTrace: latestRetrieveTrace };
     saveStep(session.id, STEP, {
       status: "completed",
       input: { intent: request?.intent || "product_decision", constraints },

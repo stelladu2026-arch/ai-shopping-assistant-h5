@@ -1,13 +1,14 @@
 // @ts-nocheck
 import { absorbDemand, acceptProbe, appliedLead, constraintTags, createState, editConstraint, probeLead, productById, publicCatalog } from "./engine";
 import { executeImage } from "./image";
-import { executeLiveCopy, modelStatus } from "./model";
+import { executeLiveCopy, interpretUtterance, modelStatus } from "./model";
 import { reflect } from "./reflect";
-import { deleteFavorite, deleteSteps, listFavorites, loadMemory, loadSession, loadSteps, nextMemoryId, noteClarify, readCallCounts, readClarifyCounts, resetCallBudgets, saveFavorite, saveMemory, saveSession } from "./db";
+import { deleteFavorite, deleteSteps, listFavorites, loadMemory, loadSession, loadStep, loadSteps, nextMemoryId, noteClarify, readCallCounts, readClarifyCounts, resetCallBudgets, saveFavorite, saveMemory, saveSession, saveStep } from "./db";
 import { FAILURE_TEXT, LIMITS } from "./limits";
 import { dropUnverifiedModelText, sealFacts } from "./facts";
 import { runGuideGraph } from "./graph";
-import { lookupStoreDoc } from "./product-decision";
+import { answerStoreDoc, lookupStoreDoc } from "./product-decision";
+import { isDroppedStoreQuestion } from "./knowledge";
 import { describeProcess } from "./process-view";
 import { buildPromoPlan } from "./promos";
 
@@ -73,6 +74,13 @@ function visibleMemory(memory, sessionId) {
     for (const item of list) prior.push({ ...item, verified: false, fromSession: id });
   }
   return { guide: memory.guide, task: sessionMemory(memory, sessionId), prior };
+}
+
+function retrievalOf(steps, decision) {
+  const routeOut = steps.route?.output || {};
+  if (routeOut.retrieval) return routeOut.retrieval;
+  if ((routeOut.entered || []).includes("product_decision")) return decision?.retrieveTrace || null;
+  return null;
 }
 
 function snapshot(session, memory) {
@@ -180,6 +188,7 @@ function snapshot(session, memory) {
           clarify: readClarifyCounts(session.id),
           failure: session.record.failure || null,
           degraded: facts ? sealFacts(facts, facts.promoPlan).degraded : [],
+          retrieval: retrievalOf(steps, decision),
         })
       : null,
     memories: visibleMemory(memory, session.id),
@@ -272,7 +281,7 @@ export async function guideMaterial(input, sessionId) {
 }
 
 export async function guideAct(body) {
-  if (body.action === "lookup") return lookupStoreDoc(body.query || body.text);
+  if (body.action === "lookup") return await lookupStoreDoc(body.query || body.text);
   const memory = loadMemory();
   const session = sessionFor(body.sessionId || body.customerId || body.customer_id);
   const action = body.action || "turn";
@@ -449,8 +458,29 @@ export async function guideAct(body) {
   } else {
     const text = String(body.text || "");
     const previousConfirmed = session.record.state.confirmed_product_id;
-    const absorbed = absorbDemand(session.record.state, text, body.revision == null ? session.record.state.revision : Number(body.revision));
+    const previous = session.record.state;
+    let interpretation = null;
+    try {
+      interpretation = await interpretUtterance(text);
+    } catch {
+      interpretation = null;
+    }
+    const absorbed = absorbDemand(session.record.state, text, body.revision == null ? session.record.state.revision : Number(body.revision), interpretation);
     if (!absorbed.ok) return { ok: false, error: absorbed.error, structured: snapshot(session, memory) };
+    const storeDoc = !absorbed.changed && isDroppedStoreQuestion(text, absorbed.state.pending_question);
+    if (storeDoc) {
+      absorbed.state.candidate_ids = previous.candidate_ids;
+      absorbed.state.confirmed_product_id = previous.confirmed_product_id;
+      absorbed.state.confirmed_product_version = previous.confirmed_product_version;
+      absorbed.state.card = previous.card;
+      absorbed.state.constraints = previous.constraints;
+      absorbed.state.pending_question = previous.pending_question;
+      absorbed.state.probe = previous.probe;
+      absorbed.state.applied_preference = previous.applied_preference;
+      absorbed.state.constraint_roles = previous.constraint_roles;
+      absorbed.reply = "";
+      absorbed.changed = false;
+    }
     if (session.record.material?.bodyText && previousConfirmed && !absorbed.state.confirmed_product_id) {
       session.record.material = {
         ...session.record.material,
@@ -471,7 +501,7 @@ export async function guideAct(body) {
     session.record.offerSwitch = false;
     const ran = await runGuideGraph(session, {
       intent: "turn",
-      needsResearch: !absorbed.state.pending_question && !absorbed.state.confirmed_product_id && absorbed.changed,
+      needsResearch: storeDoc ? false : (!absorbed.state.pending_question && !absorbed.state.confirmed_product_id && absorbed.changed),
       text,
     });
     let lead = absorbed.reply || ran.reply || "";
@@ -494,6 +524,19 @@ export async function guideAct(body) {
     }
     if (/发布|下单/.test(text) && !absorbed.changed) {
       lead = "不能代为发布或下单。请先说明要看的商品条件。";
+    }
+    if (storeDoc) {
+      const answered = await answerStoreDoc(session.id, text);
+      const row = loadStep(session.id, "route");
+      if (row && answered.trace) {
+        saveStep(session.id, "route", {
+          status: "completed",
+          input: row.input,
+          output: { ...(row.output || {}), retrieval: answered.trace },
+          error: null,
+        });
+      }
+      lead = answered.text;
     }
     session.record.failure = failureFromLead(lead);
     result = {

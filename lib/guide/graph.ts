@@ -56,7 +56,7 @@ function guideGraph() {
     .addNode("product_decision", async (state) => {
       const run = runs.get(state.runId);
       run.trace.entered.push("product_decision");
-      run.trace.result = runProductDecision(run.session, run.request);
+      run.trace.result = await runProductDecision(run.session, run.request);
       return {};
     })
     .addNode("content", async (state) => {

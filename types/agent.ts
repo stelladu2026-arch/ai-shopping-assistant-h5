@@ -153,7 +153,7 @@ export interface GuideTurnBlock {
   };
   process?: {
     workflow: { step: string; why: string; status: string };
-    rag: { hit: boolean; title: string; excerpt: string };
+    rag: { hit: boolean; title: string; excerpt: string; method?: string; fallback?: string };
     agent: { did: string; cannot: string };
     usage?: {
       retrieve: { used: number; limit: number };

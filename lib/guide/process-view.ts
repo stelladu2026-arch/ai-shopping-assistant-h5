@@ -5,7 +5,7 @@ import { LIMITS } from "./limits";
 
 const CANNOT = "不能手改名称、价格和规格。不能把不能叠加的活动说成可以一起用。不能把未验证的记忆当成筛选规则。";
 
-export function describeProcess({ edge, note, state, facts, material, decision, contentStatus, productStatus, usage, clarify, failure, degraded }) {
+export function describeProcess({ edge, note, state, facts, material, decision, contentStatus, productStatus, usage, clarify, failure, degraded, retrieval }) {
   const pending = state?.pending_question || "";
   let step = "补条件";
   let status = "完成";
@@ -62,10 +62,28 @@ export function describeProcess({ edge, note, state, facts, material, decision, 
     else excerpt = "没有检索到门店资料，不能编造说明。";
   }
 
+  if (retrieval && edge !== "product_decision" && edge !== "stay" && edge !== "content" && edge !== "blocked") {
+    if (retrieval.hit) {
+      hit = true;
+      title = retrieval.title || "";
+      excerpt = retrieval.excerpt || "";
+    } else if (retrieval.excerpt) {
+      hit = false;
+      title = retrieval.title || "";
+      excerpt = retrieval.excerpt;
+    }
+  }
+
   const used = usage || {};
   return {
     workflow: { step, why, status },
-    rag: { hit, title, excerpt },
+    rag: {
+      hit,
+      title,
+      excerpt,
+      method: retrieval?.methodLabel || "",
+      fallback: retrieval?.fallbackNote || "",
+    },
     agent: { did, cannot: CANNOT },
     usage: {
       retrieve: { used: used.retrieve || 0, limit: LIMITS.retrieve },

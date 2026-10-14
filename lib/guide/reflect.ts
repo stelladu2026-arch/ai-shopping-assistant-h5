@@ -35,6 +35,15 @@ export function reflect(state, confirmedFacts) {
     if (constraints.exclude_material) {
       checks.push({target: id, name: '材质', ok: product.material !== constraints.exclude_material, detail: product.material});
     }
+    if (constraints.material) {
+      const materialHard = state?.constraint_roles?.material !== "prefer";
+      checks.push({
+        target: id,
+        name: '材质',
+        ok: materialHard ? product.material === constraints.material : true,
+        detail: materialHard ? product.material : `优先考虑${constraints.material}，这件是${product.material}，不作为必须满足`,
+      });
+    }
   }
   if (state?.confirmed_product_id && state.card?.promotions) {
     for (const promo of state.card.promotions) {

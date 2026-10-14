@@ -43,6 +43,9 @@ export function GuideProcess({
               </div>
               <div>
                 <h3 className="text-[0.8rem] font-bold text-slate-900">资料检索（RAG）</h3>
+                {process.rag.method ? (
+                  <p className="mt-1 text-[0.78rem] leading-relaxed text-slate-700">{process.rag.method}</p>
+                ) : null}
                 <p className="mt-1 text-[0.78rem] leading-relaxed text-slate-700">{rag}</p>
               </div>
               <div>

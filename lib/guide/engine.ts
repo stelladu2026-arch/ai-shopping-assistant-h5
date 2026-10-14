@@ -1,6 +1,7 @@
 // @ts-nocheck
 import catalog from "../../data/catalog.json";
 import promotions from "../../data/promotions.json";
+import { clausePatch } from "./clauses";
 import { buildPromoPlan } from "./promos";
 import { FAILURE_TEXT } from "./limits";
 
@@ -19,12 +20,14 @@ export function defaultRoles() {
     color: "hard",
     exclude_material: "hard",
     style: "prefer",
+    material: "hard",
     budget_max_cny_locked: true,
     width_max_cm_locked: true,
     category_locked: true,
     exclude_material_locked: true,
     color_locked: false,
     style_locked: false,
+    material_locked: false,
   };
 }
 
@@ -68,6 +71,7 @@ function fitHits(item, constraints) {
   else if (constraints.color && constraints.color !== "浅色" && item.color === constraints.color) hits += 1;
   if (constraints.exclude_material && item.material !== constraints.exclude_material) hits += 1;
   if (constraints.style && item.style === constraints.style) hits += 1;
+  if (constraints.material && item.material === constraints.material) hits += 1;
   return hits;
 }
 
@@ -105,6 +109,7 @@ function matches(item, constraints, roles) {
   if (isHard(roles, "color") && constraints.color === "浅色" && !LIGHT_COLORS.includes(item.color)) return false;
   if (isHard(roles, "color") && constraints.color && constraints.color !== "浅色" && item.color !== constraints.color) return false;
   if (isHard(roles, "exclude_material") && constraints.exclude_material && item.material === constraints.exclude_material) return false;
+  if (isHard(roles, "material") && constraints.material && item.material !== constraints.material) return false;
   if (isHard(roles, "style") && constraints.style && item.style !== constraints.style) return false;
   return true;
 }
@@ -115,6 +120,7 @@ function tagText(field, value) {
   if (field === "category") return `品类 ${value}`;
   if (field === "color") return `颜色 ${value}`;
   if (field === "exclude_material") return `排除 ${value}`;
+  if (field === "material") return `材质 ${value}`;
   if (field === "style") return `风格 ${value}`;
   return String(value);
 }
@@ -186,7 +192,7 @@ export function appliedLead(applied) {
 export function constraintTags(state) {
   const constraints = state?.constraints || {};
   const roles = mergedRoles(state?.constraint_roles);
-  return ["budget_max_cny", "width_max_cm", "category", "color", "exclude_material", "style"]
+  return ["budget_max_cny", "width_max_cm", "category", "color", "exclude_material", "material", "style"]
     .filter((field) => constraints[field] != null && constraints[field] !== "")
     .map((field) => ({
       field,
@@ -197,21 +203,38 @@ export function constraintTags(state) {
     }));
 }
 
-function rememberRoles(next, text, parsed) {
+function rememberRoles(next, text, parsed, fieldMarks) {
   const roles = mergedRoles(next.constraint_roles);
-  if (parsed.budget != null) roles.budget_max_cny = "hard";
-  if (parsed.width?.value != null) roles.width_max_cm = "hard";
-  if (parsed.category) roles.category = "hard";
-  if (parsed.material?.value) roles.exclude_material = "hard";
+  if (parsed.budget != null) {
+    roles.budget_max_cny = "hard";
+    roles.budget_max_cny_locked = true;
+  }
+  if (parsed.width?.value != null) {
+    roles.width_max_cm = "hard";
+    roles.width_max_cm_locked = true;
+  }
+  if (parsed.category) {
+    roles.category = "hard";
+    roles.category_locked = true;
+  }
+  if (parsed.material?.value) {
+    roles.exclude_material = "hard";
+    roles.exclude_material_locked = true;
+  }
   if (parsed.color?.value) {
-    const marked = preferenceMark(text);
+    const marked = fieldMarks?.color || preferenceMark(text);
     roles.color = marked.strength;
     roles.color_locked = marked.locked;
   }
   if (parsed.style) {
-    const marked = preferenceMark(text);
+    const marked = fieldMarks?.style || preferenceMark(text);
     roles.style = marked.strength;
     roles.style_locked = marked.locked;
+  }
+  if (parsed.material?.include) {
+    const marked = fieldMarks?.material || { strength: "hard", locked: false };
+    roles.material = marked.strength;
+    roles.material_locked = marked.locked;
   }
   next.constraint_roles = roles;
 }
@@ -227,7 +250,7 @@ export function editConstraint(state, patch, clientRevision) {
     return { ok: false, error: "revision_conflict", state, needsResearch: false };
   }
   const field = patch?.field;
-  if (!["budget_max_cny", "width_max_cm", "category", "color", "exclude_material", "style"].includes(field)) {
+  if (!["budget_max_cny", "width_max_cm", "category", "color", "exclude_material", "material", "style"].includes(field)) {
     return { ok: false, error: "unknown_constraint", state, needsResearch: false };
   }
   const next = structuredClone(state);
@@ -423,6 +446,38 @@ function constraintsChanged(before, after) {
   return JSON.stringify(before) !== JSON.stringify(after);
 }
 
+function mergeMaterial(offlineMaterial, patch) {
+  if (!patch?.active) return offlineMaterial;
+  if (patch.material?.ambiguous) return { ambiguous: patch.material.ambiguous };
+  if (offlineMaterial?.ambiguous) return offlineMaterial;
+  const excludes = [];
+  if (offlineMaterial?.value) excludes.push(offlineMaterial.value);
+  if (patch.material?.value && !excludes.includes(patch.material.value)) excludes.push(patch.material.value);
+  if (excludes.length > 1) return { ambiguous: excludes };
+  const material = {};
+  if (offlineMaterial?.clear) material.clear = true;
+  if (excludes.length === 1) material.value = excludes[0];
+  if (patch.material?.include) material.include = patch.material.include;
+  if (!material.value && !material.include && !material.clear) return offlineMaterial;
+  return material;
+}
+
+function readTurn(text, interpretation) {
+  const patch = clausePatch(text, interpretation);
+  return {
+    width: parseWidth(text),
+    budget: parseBudget(text),
+    category: parseCategory(text),
+    color: patch?.color || parseColor(text),
+    material: mergeMaterial(parseMaterial(text), patch),
+    style: patch?.style || parseStyle(text),
+    copy: parseCopy(text),
+    marks: patch?.active ? patch.marks : null,
+    unresolved: patch?.active ? patch.unresolved : null,
+    interpreted: Boolean(patch?.active),
+  };
+}
+
 function unmatchedLookup(text) {
   for (const item of catalog) {
     if (text.includes(item.name) || text.includes(item.model)) return null;
@@ -434,19 +489,14 @@ function unmatchedLookup(text) {
   return rest.length >= 2 ? rest.slice(0, 16) : null;
 }
 
-export function absorbDemand(state, text, clientRevision) {
+export function absorbDemand(state, text, clientRevision, interpretation = null) {
   if (clientRevision != null && clientRevision !== state.revision) {
     return {ok: false, error: 'revision_conflict', state, needsResearch: false};
   }
   const next = structuredClone(state);
   const before = structuredClone(next.constraints);
-  const width = parseWidth(text);
-  const budget = parseBudget(text);
-  const category = parseCategory(text);
-  const color = parseColor(text);
-  const material = parseMaterial(text);
-  const style = parseStyle(text);
-  const copy = parseCopy(text);
+  const read = readTurn(text, interpretation);
+  const { width, budget, category, color, material, style, copy, marks } = read;
   const cheaper = /便宜点/.test(text) && budget == null;
   const smallHome = /小户型/.test(text) && !(width && width.value);
   const switchProduct = /换一款|重新选|换一个/.test(text);
@@ -457,10 +507,15 @@ export function absorbDemand(state, text, clientRevision) {
   if (category) next.constraints.category = category;
   if (color?.clear) next.constraints.color = null;
   else if (color?.value) next.constraints.color = color.value;
-  if (material?.clear) next.constraints.exclude_material = null;
-  else if (material?.value) next.constraints.exclude_material = material.value;
+  if (material?.clear) {
+    next.constraints.exclude_material = null;
+    next.constraints.material = null;
+  } else {
+    if (material?.value) next.constraints.exclude_material = material.value;
+    if (material?.include) next.constraints.material = material.include;
+  }
   if (style) next.constraints.style = style;
-  rememberRoles(next, text, { budget, width, category, color, material, style });
+  rememberRoles(next, text, { budget, width, category, color, material, style }, marks);
   next.probe = null;
   next.applied_preference = null;
   if (copy.maxChars || copy.tone) {
@@ -482,7 +537,9 @@ export function absorbDemand(state, text, clientRevision) {
     next.revision += 1;
     return {ok: true, state: next, needsResearch: false, changed, reply: next.pending_question};
   }
-  const unknownName = !copy.asked && !cheaper && !smallHome && !switchProduct ? unmatchedLookup(text) : null;
+  const unknownName = !copy.asked && !cheaper && !smallHome && !switchProduct
+    ? (read.interpreted ? (read.unresolved?.[0] || null) : unmatchedLookup(text))
+    : null;
   if (material?.ambiguous) {
     next.pending_question = '还缺要排除的那一种材质。下一步：只回复一种，例如不要皮质。当前不能同时排除两种。';
     next.candidate_ids = [];
@@ -515,19 +572,14 @@ export function absorbDemand(state, text, clientRevision) {
   };
 }
 
-export function applyTurn(state, text, clientRevision) {
+export function applyTurn(state, text, clientRevision, interpretation = null) {
   if (clientRevision != null && clientRevision !== state.revision) {
     return {ok: false, error: 'revision_conflict', state, searched: false, composed: false};
   }
   const next = structuredClone(state);
   const before = structuredClone(next.constraints);
-  const width = parseWidth(text);
-  const budget = parseBudget(text);
-  const category = parseCategory(text);
-  const color = parseColor(text);
-  const material = parseMaterial(text);
-  const style = parseStyle(text);
-  const copy = parseCopy(text);
+  const read = readTurn(text, interpretation);
+  const { width, budget, category, color, material, style, copy, marks } = read;
   const cheaper = /便宜点/.test(text) && budget == null;
   const smallHome = /小户型/.test(text) && !(width && width.value);
   const switchProduct = /换一款|重新选|换一个/.test(text);
@@ -538,10 +590,15 @@ export function applyTurn(state, text, clientRevision) {
   if (category) next.constraints.category = category;
   if (color?.clear) next.constraints.color = null;
   else if (color?.value) next.constraints.color = color.value;
-  if (material?.clear) next.constraints.exclude_material = null;
-  else if (material?.value) next.constraints.exclude_material = material.value;
+  if (material?.clear) {
+    next.constraints.exclude_material = null;
+    next.constraints.material = null;
+  } else {
+    if (material?.value) next.constraints.exclude_material = material.value;
+    if (material?.include) next.constraints.material = material.include;
+  }
   if (style) next.constraints.style = style;
-  rememberRoles(next, text, { budget, width, category, color, material, style });
+  rememberRoles(next, text, { budget, width, category, color, material, style }, marks);
   next.probe = null;
   next.applied_preference = null;
 
