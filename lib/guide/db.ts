@@ -3,10 +3,14 @@ import fs from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-const file = path.join(process.cwd(), "data", "guide.sqlite");
+function sqliteFile() {
+  if (process.env.VERCEL) return path.join("/tmp", "guide.sqlite");
+  return path.join(process.cwd(), "data", "guide.sqlite");
+}
 
 function database() {
   if (!globalThis.__guideSqlite) {
+    const file = sqliteFile();
     fs.mkdirSync(path.dirname(file), { recursive: true });
     globalThis.__guideSqlite = new DatabaseSync(file);
     globalThis.__guideSqlite.exec("PRAGMA journal_mode = WAL;");
@@ -65,7 +69,7 @@ function database() {
 }
 
 export function dbFile() {
-  return file;
+  return sqliteFile();
 }
 
 export function loadSession(id) {

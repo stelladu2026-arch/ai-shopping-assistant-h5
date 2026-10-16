@@ -26,7 +26,70 @@ async function responseQuota(response) {
 }
 
 function placeholder(request, extra = {}) {
-  return {simulation: true, called: false, pending_human: true, quota: Boolean(extra.quota), label: '演示回放、待核对', request};
+  return {simulation: true, called: false, pending_human: true, quota: Boolean(extra.quota), url: '', label: '演示回放、待核对', request};
+}
+
+function httpUrl(value) {
+  const text = String(value || '').trim();
+  if (!/^https?:\/\//i.test(text)) return '';
+  return text;
+}
+
+function imageUrlFrom(payload) {
+  if (!payload || typeof payload !== 'object') return '';
+  const rows = []
+    .concat(Array.isArray(payload.data) ? payload.data : [])
+    .concat(Array.isArray(payload.output?.results) ? payload.output.results : []);
+  for (const item of rows) {
+    const url = httpUrl(item?.url || item?.image || item?.image_url);
+    if (url) return url;
+  }
+  const choices = []
+    .concat(Array.isArray(payload.choices) ? payload.choices : [])
+    .concat(Array.isArray(payload.output?.choices) ? payload.output.choices : []);
+  for (const choice of choices) {
+    const content = choice?.message?.content;
+    const parts = Array.isArray(content) ? content : [content];
+    for (const part of parts) {
+      const url = httpUrl(typeof part === 'string' ? part : (part?.image || part?.url || part?.image_url));
+      if (url) return url;
+    }
+  }
+  return httpUrl(payload.url || payload.output?.url);
+}
+
+async function readPayload(response) {
+  if (typeof response?.text === 'function') {
+    let raw = '';
+    try { raw = await response.text(); } catch { raw = ''; }
+    try { return JSON.parse(raw); } catch { return null; }
+  }
+  if (typeof response?.json === 'function') {
+    try { return await response.json(); } catch { return null; }
+  }
+  return null;
+}
+
+async function finishImage(response, request) {
+  if (!response?.ok) {
+    if (await responseQuota(response)) return placeholder(request, {quota: true});
+    return {simulation: false, called: true, pending_human: true, ok: false, url: '', label: '待核对', request};
+  }
+  const url = imageUrlFrom(await readPayload(response));
+  if (!url) {
+    return {simulation: true, called: true, pending_human: true, ok: true, url: '', label: '演示回放、待核对', request};
+  }
+  return {simulation: false, called: true, pending_human: true, ok: true, url, label: '待核对', request};
+}
+
+async function requestImage(request, env, fetcher) {
+  const response = await fetcher(request.url, {
+    method: 'POST',
+    redirect: 'manual',
+    headers: {'Content-Type': 'application/json', Authorization: 'Bearer ' + String(env.IMAGE_API_KEY).trim()},
+    body: JSON.stringify(request.body)
+  });
+  return finishImage(response, request);
 }
 
 export function imageStatus(env = process.env) {
@@ -69,29 +132,15 @@ export async function executeImage(product, env = process.env, fetcher = fetch, 
       return placeholder(request);
     }
     try {
-      const response = await fetcher(request.url, {
-        method: 'POST',
-        redirect: 'manual',
-        headers: {'Content-Type': 'application/json', Authorization: 'Bearer ' + String(env.IMAGE_API_KEY).trim()},
-        body: JSON.stringify(request.body)
-      });
-      if (!response.ok && await responseQuota(response)) return placeholder(request, {quota: true});
-      return {simulation: false, called: true, pending_human: true, ok: response.ok, label: '待核对', request};
+      return await requestImage(request, env, fetcher);
     } catch (error) {
       if (isQuotaFailure(0, null, String(error?.message || error))) return placeholder(request, {quota: true});
       if (!isTransportError(error)) throw error;
-      return {simulation: false, called: true, network: true, pending_human: true, label: '网络错误', request};
+      return {simulation: false, called: true, network: true, pending_human: true, url: '', label: '网络错误', request};
     }
   }
   if (!status.ready) {
     return placeholder(request);
   }
-  const response = await fetcher(request.url, {
-    method: 'POST',
-    redirect: 'manual',
-    headers: {'Content-Type': 'application/json', Authorization: 'Bearer ' + String(env.IMAGE_API_KEY).trim()},
-    body: JSON.stringify(request.body)
-  });
-  if (!response.ok && await responseQuota(response)) return placeholder(request, {quota: true});
-  return {simulation: false, called: true, pending_human: true, ok: response.ok, label: '待核对', request};
+  return requestImage(request, env, fetcher);
 }
