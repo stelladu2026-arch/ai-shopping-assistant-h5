@@ -122,8 +122,35 @@ button, input { font: inherit; color: inherit; }
 .seg { flex: 1; border-radius: 10px; color: var(--muted); }
 .seg.is-on { background: var(--blue); color: white; }
 .list { display: flex; flex-direction: column; gap: 10px; }
-.session { align-items: stretch; border: 1px solid var(--line); border-radius: 16px; margin: 0 12px; padding: 0; }
-.session .prompt { border: 0; }
+.session { align-items: stretch; flex-wrap: wrap; border: 1px solid var(--line); border-radius: 16px; margin: 0 12px; padding: 0; }
+.session .prompt { flex: 1; border: 0; }
+.session .text-btn { align-self: center; }
+.customer-name { display: block; margin: 4px 16px 0; }
+.rename {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: flex;
+  align-items: flex-end;
+  background: rgba(15, 23, 42, 0.35);
+}
+.rename[hidden] { display: none; }
+.rename-card {
+  width: 100%;
+  padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+  border-radius: 16px 16px 0 0;
+  background: white;
+}
+.rename-title { margin: 0 0 8px; font-weight: 700; }
+.rename-card input {
+  width: 100%;
+  min-height: 44px;
+  font-size: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0 12px;
+}
+.rename-card .confirm { width: auto; padding: 0 16px; }
 .tag {
   display: inline-block;
   margin-top: 6px;

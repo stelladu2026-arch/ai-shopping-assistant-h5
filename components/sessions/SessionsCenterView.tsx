@@ -222,6 +222,7 @@ export function SessionsCenterView({ onToast }: SessionsCenterViewProps) {
                           key={s.id}
                           session={s}
                           onDeleteClick={() => setPendingDeleteId(s.id)}
+                          onRenamed={() => setTick((value) => value + 1)}
                         />
                       ))}
                     </ul>

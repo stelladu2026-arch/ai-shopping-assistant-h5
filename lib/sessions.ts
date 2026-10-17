@@ -99,9 +99,11 @@ function normalizeSession(x: unknown): ChatSessionRecord | null {
     messagesRag = split.rag;
   }
 
+  const customerName = typeof o.customerName === "string" ? o.customerName.trim().slice(0, 20) : "";
   return {
     id,
-    title: deriveSessionTitleDual(messagesMoments, messagesRag),
+    title: customerName || deriveSessionTitleDual(messagesMoments, messagesRag),
+    customerName: customerName || undefined,
     sceneTag: deriveSceneTagDual(messagesMoments, messagesRag, sceneMode),
     lastPreview: deriveLastPreviewDual(messagesMoments, messagesRag),
     updatedAt: typeof o.updatedAt === "number" ? o.updatedAt : Date.now(),
@@ -191,6 +193,23 @@ export function upsertSession(record: ChatSessionRecord): void {
   persist(list.slice(0, 80));
 }
 
+export function sessionTitleFor(id: string, messagesMoments: ChatMessage[], messagesRag: ChatMessage[]): string {
+  return getSession(id)?.customerName?.trim() || deriveSessionTitleDual(messagesMoments, messagesRag);
+}
+
+export function renameSessionCustomer(id: string, name: string): ChatSessionRecord | null {
+  const current = getSession(id);
+  if (!current) return null;
+  const customerName = name.trim().replace(/\s+/g, " ").slice(0, 20);
+  const next: ChatSessionRecord = {
+    ...current,
+    customerName: customerName || undefined,
+    title: customerName || deriveSessionTitleDual(current.messagesMoments, current.messagesRag),
+  };
+  upsertSession(next);
+  return getSession(id);
+}
+
 export function deriveSessionTitle(messages: ChatMessage[]): string {
   for (const m of messages) {
     if (m.role !== "user") continue;
@@ -258,9 +277,11 @@ export function buildSessionRecord(
   sceneMode: AgentScene,
   momentsForm?: MomentsGenerationInput,
 ): ChatSessionRecord {
+  const customerName = getSession(id)?.customerName?.trim() || "";
   return {
     id,
-    title: deriveSessionTitleDual(messagesMoments, messagesRag),
+    title: customerName || deriveSessionTitleDual(messagesMoments, messagesRag),
+    customerName: customerName || undefined,
     sceneTag: deriveSceneTagDual(messagesMoments, messagesRag, sceneMode),
     lastPreview: deriveLastPreviewDual(messagesMoments, messagesRag),
     updatedAt: Date.now(),

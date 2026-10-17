@@ -17,6 +17,7 @@ let guideTone = null;
 let memoryBook = {guide: [], sessions: {}};
 let pendingLabel = '';
 let busy = false;
+let renameTarget = null;
 
 const $ = selector => document.querySelector(selector);
 
@@ -123,12 +124,17 @@ function renderSessions() {
     }
     open.append(span);
     open.addEventListener('click', () => openChat(item.id, 'sessions'));
+    const rename = document.createElement('button');
+    rename.type = 'button';
+    rename.className = 'text-btn tap';
+    rename.textContent = '改名';
+    rename.addEventListener('click', () => openRename(item.id, item.customer_name || ''));
     const clear = document.createElement('button');
     clear.type = 'button';
     clear.className = 'text-btn tap';
     clear.textContent = '清空';
     clear.addEventListener('click', () => resetSession(item.id));
-    row.append(open, clear);
+    row.append(open, rename, clear);
     list.append(row);
   }
 }
@@ -185,7 +191,9 @@ function reasonFor(product, state) {
 }
 
 function renderChat() {
-  $('#chat-title').textContent = scene === 'copy' ? '推荐话术' : '选品推荐';
+  const customerName = active?.customer_name || '';
+  $('#chat-title').textContent = customerName || (scene === 'copy' ? '推荐话术' : '选品推荐');
+  $('#rename-current').textContent = customerName ? '客户：' + customerName : '改成客户名';
   for (const button of document.querySelectorAll('[data-scene]')) {
     button.classList.toggle('is-on', button.dataset.scene === scene);
   }
@@ -521,6 +529,31 @@ async function confirmProduct(productId) {
   await post('/api/confirm', {product_id: productId});
 }
 
+function openRename(id, current) {
+  renameTarget = id;
+  $('#rename-input').value = current || '';
+  $('#rename-sheet').hidden = false;
+  $('#rename-input').focus();
+}
+
+function closeRename() {
+  renameTarget = null;
+  $('#rename-sheet').hidden = true;
+}
+
+async function renameSession(id, name) {
+  const response = await fetch('/api/session/name', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({session_id: id, name})
+  });
+  if (!response.ok) return;
+  const payload = await response.json();
+  if (sessionId === id) active = payload;
+  await refreshSessions();
+  if (screen === 'chat') renderChat();
+}
+
 async function resetSession(id) {
   await fetch('/api/reset', {
     method: 'POST',
@@ -536,6 +569,22 @@ $('#chat-settings').addEventListener('click', () => { renderSettings(); show('se
 $('#settings-back').addEventListener('click', () => show(backTo === 'settings' ? 'home' : backTo));
 $('#chat-back').addEventListener('click', () => show(backTo));
 $('#sessions-home').addEventListener('click', () => show('home'));
+$('#rename-current').addEventListener('click', () => {
+  if (sessionId) openRename(sessionId, active?.customer_name || '');
+});
+$('#rename-sheet').addEventListener('submit', async event => {
+  event.preventDefault();
+  const id = renameTarget;
+  const name = $('#rename-input').value;
+  closeRename();
+  if (id) await renameSession(id, name);
+});
+$('#rename-clear').addEventListener('click', async () => {
+  const id = renameTarget;
+  closeRename();
+  if (id) await renameSession(id, '');
+});
+$('#rename-cancel').addEventListener('click', closeRename);
 $('#open-search').addEventListener('click', () => openNew('home', 'search'));
 $('#open-copy').addEventListener('click', () => openNew('home', 'copy'));
 $('#new-chat').addEventListener('click', () => openNew('sessions', 'search'));

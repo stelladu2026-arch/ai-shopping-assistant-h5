@@ -32,10 +32,16 @@ function send(response, status, body, type = 'application/json; charset=utf-8') 
 }
 
 function blankRecord() {
-  return {state: createState(), messages: [], image: null, updatedAt: 0};
+  return {state: createState(), messages: [], image: null, customerName: '', updatedAt: 0};
+}
+
+function clipCustomerName(value) {
+  return String(value || '').trim().replace(/\s+/g, ' ').slice(0, 20);
 }
 
 function sessionTitle(record) {
+  const named = clipCustomerName(record.customerName);
+  if (named) return named;
   const first = record.messages.find(item => item.role === 'user' && String(item.text || '').trim());
   if (!first) return '新会话';
   const line = String(first.text).trim().split('\n')[0];
@@ -95,6 +101,7 @@ function summary(id, record) {
   return {
     id,
     name: sessionTitle(record),
+    customer_name: clipCustomerName(record.customerName),
     preview: lastReply ? clip(lastReply.text) : (record.messages.length ? '还没有回复' : '还没有消息'),
     revision: record.state.revision,
     confirmed_name: product?.name || null,
@@ -121,6 +128,7 @@ function view(result, sessionId) {
     composed: Boolean(result.composed),
     session_id: sessionId,
     title: record ? sessionTitle(record) : '新会话',
+    customer_name: record ? clipCustomerName(record.customerName) : '',
     mode: status.mode,
     guide_tone: guideTone(),
     messages: record?.messages || [],
@@ -179,6 +187,18 @@ async function handleApi(request, response, url) {
   if (request.method === 'POST' && url.pathname === '/api/sessions') {
     const session = createSession();
     send(response, 200, view({ok: true, status: 'created', reply: null, state: session.record.state}, session.id));
+    return;
+  }
+  if (request.method === 'POST' && url.pathname === '/api/session/name') {
+    const body = await readJson(request);
+    const session = getSession(body.session_id);
+    if (!session) {
+      send(response, 404, {error: 'session_not_found'});
+      return;
+    }
+    session.record.customerName = clipCustomerName(body.name);
+    session.record.updatedAt = Date.now();
+    send(response, 200, view({ok: true, status: 'renamed', reply: null, state: session.record.state}, session.id));
     return;
   }
   if (request.method === 'GET' && url.pathname === '/api/session') {

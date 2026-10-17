@@ -46,8 +46,28 @@ assert.equal(first.body.title, '只看餐桌，预算3000元');
 
 const list = await read('/api/sessions');
 assert.deepEqual(list.body.sessions.map(item => item.name).sort(), ['只看沙发，预算2000元', '只看餐桌，预算3000元']);
-assert.equal(JSON.stringify(list.body).includes('小陈'), false);
-assert.equal(JSON.stringify(list.body).includes('林女士'), false);
+assert.equal(list.body.sessions.every(item => item.customer_name === ''), true);
+
+const renamed = await read('/api/session/name', {
+  method: 'POST',
+  headers: {'Content-Type': 'application/json'},
+  body: JSON.stringify({session_id: id, name: '  林女士  '})
+});
+assert.equal(renamed.body.title, '林女士');
+assert.equal(renamed.body.customer_name, '林女士');
+const followed = await read('/api/turn', {
+  method: 'POST',
+  headers: {'Content-Type': 'application/json'},
+  body: JSON.stringify({session_id: id, text: '便宜点', revision: turned.body.state.revision})
+});
+assert.equal(followed.body.title, '林女士');
+const cleared = await read('/api/session/name', {
+  method: 'POST',
+  headers: {'Content-Type': 'application/json'},
+  body: JSON.stringify({session_id: id, name: ''})
+});
+assert.equal(cleared.body.title, '只看餐桌，预算3000元');
+assert.equal(cleared.body.customer_name, '');
 
 server.close();
 console.log('ok h5 sessions');

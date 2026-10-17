@@ -32,7 +32,7 @@ import {
   parseMomentsOutputKind,
   toAgentPayload,
 } from "@/lib/chat/chatPageShared";
-import { buildSessionRecord, deriveSessionTitleDual, getSession, setLastActiveSessionId, upsertSession } from "@/lib/sessions";
+import { buildSessionRecord, getSession, sessionTitleFor, setLastActiveSessionId, upsertSession } from "@/lib/sessions";
 import { chatInitialMessages } from "@/mock/chat";
 import type {
   AgentScene,
@@ -244,7 +244,7 @@ export function ChatPageClient() {
           action: "sync",
           sessionId,
           transcript: {
-            title: deriveSessionTitleDual(moments, rag),
+            title: sessionTitleFor(sessionId, moments, rag),
             sceneMode,
             messagesMoments: moments,
             messagesRag: rag,
@@ -278,7 +278,7 @@ export function ChatPageClient() {
   const onToggleFavorite = useCallback(
     (message: ChatMessage) => {
       if (!sessionId) return;
-      const sessionTitle = deriveSessionTitleDual(messagesMomentsRef.current, messagesRagRef.current);
+      const sessionTitle = sessionTitleFor(sessionId, messagesMomentsRef.current, messagesRagRef.current);
       const r = toggleFavorite({ sessionId, sessionTitle, message });
       if (r === "added") setToastMsg("已加入收藏");
       else if (r === "removed") setToastMsg("已取消收藏");
@@ -710,7 +710,7 @@ export function ChatPageClient() {
       if (message && sessionId) {
         const result = toggleFavorite({
           sessionId,
-          sessionTitle: deriveSessionTitleDual(messagesMomentsRef.current, messagesRagRef.current),
+          sessionTitle: sessionTitleFor(sessionId, messagesMomentsRef.current, messagesRagRef.current),
           message,
         });
         setToastMsg(result === "added" ? "已收藏这件商品" : result === "removed" ? "已取消收藏" : "还不能收藏");

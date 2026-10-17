@@ -8,6 +8,8 @@ export type SessionSceneCategory = "产品" | "活动" | "文案" | "对比";
 export interface ChatSessionRecord {
   id: string;
   title: string;
+  /** 导购把这份会话改成的客户名。有值时标题不再跟着第一句提问变。 */
+  customerName?: string;
   /** 展示用场景标签 */
   sceneTag: string;
   lastPreview: string;

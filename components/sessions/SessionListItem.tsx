@@ -1,14 +1,16 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import type { ChatSessionRecord, SessionSceneCategory } from "@/types/session";
-import { deriveSessionCategoryLabel, sessionMessagesCombined } from "@/lib/sessions";
+import { deriveSessionCategoryLabel, renameSessionCustomer, sessionMessagesCombined } from "@/lib/sessions";
 import { formatRelativeTime } from "@/lib/formatRelativeTime";
 
 interface SessionListItemProps {
   session: ChatSessionRecord;
   /** 用户确认删除前由上层弹出二次确认 */
   onDeleteClick: () => void;
+  onRenamed: () => void;
 }
 
 const categoryBadgeClass: Record<SessionSceneCategory, string> = {
@@ -18,16 +20,18 @@ const categoryBadgeClass: Record<SessionSceneCategory, string> = {
   对比: "bg-violet-50 text-violet-900 ring-violet-100/90",
 };
 
-export function SessionListItem({ session, onDeleteClick }: SessionListItemProps) {
+export function SessionListItem({ session, onDeleteClick, onRenamed }: SessionListItemProps) {
   const href = `/chat?sessionId=${encodeURIComponent(session.id)}`;
   const preview = session.lastPreview.trim() || "（暂无摘要）";
   const category = deriveSessionCategoryLabel(sessionMessagesCombined(session), session.sceneMode);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(session.customerName || "");
 
   return (
-    <li className="group relative">
+    <li className="group relative rounded-xl border border-slate-200/60 bg-white px-3.5 py-3 shadow-sm">
       <Link
         href={href}
-        className="block rounded-xl border border-slate-200/60 bg-white px-3.5 py-3 shadow-sm transition-colors active:bg-slate-50/90"
+        className="block rounded-lg transition-colors active:bg-slate-50/90"
       >
         <div className="flex items-start justify-between gap-2 pr-8">
           <h3 className="min-w-0 flex-1 truncate text-[0.88rem] font-semibold leading-snug text-slate-900">
@@ -47,8 +51,54 @@ export function SessionListItem({ session, onDeleteClick }: SessionListItemProps
           >
             {category}
           </span>
+          {session.customerName ? (
+            <span className="inline-flex rounded-md bg-slate-100 px-2 py-0.5 text-[0.65rem] font-semibold text-slate-600">
+              客户
+            </span>
+          ) : null}
         </div>
       </Link>
+      {editing ? (
+        <form
+          className="mt-2 flex items-center gap-2 pr-10"
+          onSubmit={(event) => {
+            event.preventDefault();
+            renameSessionCustomer(session.id, draft);
+            setEditing(false);
+            onRenamed();
+          }}
+        >
+          <input
+            aria-label="客户名称"
+            maxLength={20}
+            value={draft}
+            placeholder="客户名称"
+            onChange={(event) => setDraft(event.target.value)}
+            className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2 py-2 text-[0.85rem] text-slate-900"
+          />
+          <button type="submit" className="shrink-0 rounded-lg bg-brand-600 px-3 py-2 text-[0.75rem] font-semibold text-white">
+            保存
+          </button>
+          <button
+            type="button"
+            className="shrink-0 px-1 text-[0.75rem] font-semibold text-slate-500"
+            onClick={() => setEditing(false)}
+          >
+            取消
+          </button>
+        </form>
+      ) : (
+        <button
+          type="button"
+          className="mt-1 px-1 text-left text-[0.75rem] font-semibold text-brand-700"
+          onClick={() => {
+            setDraft(session.customerName || "");
+            setEditing(true);
+          }}
+        >
+          {session.customerName ? "修改客户名" : "改成客户名"}
+        </button>
+      )}
       <button
         type="button"
         onClick={(e) => {
