@@ -11,16 +11,31 @@ export function useLocalStorage<T>(key: string, initialValue: T) {
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(key);
-      if (raw != null && raw !== "") {
-        setState(JSON.parse(raw) as T);
+    const read = () => {
+      try {
+        const raw = window.localStorage.getItem(key);
+        if (raw != null && raw !== "") setState(JSON.parse(raw) as T);
+        else setState(initialValue);
+      } catch {
+        /* ignore parse errors */
       }
-    } catch {
-      /* ignore parse errors */
-    }
+    };
+    read();
     setHydrated(true);
-  }, [key]);
+    const onCustom = (event: Event) => {
+      const detail = (event as CustomEvent<{ key?: string }>).detail;
+      if (detail?.key === key) read();
+    };
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === key) read();
+    };
+    window.addEventListener("app-local-storage", onCustom);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener("app-local-storage", onCustom);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, [key, initialValue]);
 
   const setValue = useCallback(
     (value: T | ((prev: T) => T)) => {
@@ -28,6 +43,9 @@ export function useLocalStorage<T>(key: string, initialValue: T) {
         const next = typeof value === "function" ? (value as (p: T) => T)(prev) : value;
         try {
           window.localStorage.setItem(key, JSON.stringify(next));
+          queueMicrotask(() => {
+            window.dispatchEvent(new CustomEvent("app-local-storage", { detail: { key } }));
+          });
         } catch {
           /* quota / private mode */
         }

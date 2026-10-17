@@ -8,7 +8,7 @@ import { FAILURE_TEXT, LIMITS } from "./limits";
 import { dropUnverifiedModelText, sealFacts } from "./facts";
 import { runGuideGraph } from "./graph";
 import { answerStoreDoc, lookupStoreDoc } from "./product-decision";
-import { isDroppedStoreQuestion } from "./knowledge";
+import { isDroppedStoreQuestion, isStorePolicyQuestion } from "./knowledge";
 import { describeProcess } from "./process-view";
 import { buildPromoPlan } from "./promos";
 
@@ -18,6 +18,10 @@ function doubtOf(text, pending) {
   if (/小户型/.test(text) || /宽度上限/.test(pending)) return "宽度";
   if (/排除的那一种材质/.test(pending)) return "材质";
   return null;
+}
+
+function hasShoppingEdit(text) {
+  return /预算|便宜|宽度|厘米|cm|不要|排除|换一款|重新选|换一个|改看|小户型|尺寸不限|颜色不限|颜色不变|颜色也可以/.test(String(text || ""));
 }
 
 function failureFromLead(lead) {
@@ -467,7 +471,8 @@ export async function guideAct(body) {
     }
     const absorbed = absorbDemand(session.record.state, text, body.revision == null ? session.record.state.revision : Number(body.revision), interpretation);
     if (!absorbed.ok) return { ok: false, error: absorbed.error, structured: snapshot(session, memory) };
-    const storeDoc = !absorbed.changed && isDroppedStoreQuestion(text, absorbed.state.pending_question);
+    const policyAside = isStorePolicyQuestion(text) && !hasShoppingEdit(text);
+    const storeDoc = policyAside || (!absorbed.changed && isDroppedStoreQuestion(text, absorbed.state.pending_question));
     if (storeDoc) {
       absorbed.state.candidate_ids = previous.candidate_ids;
       absorbed.state.confirmed_product_id = previous.confirmed_product_id;

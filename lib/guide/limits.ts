@@ -5,6 +5,7 @@ export const LIMITS = {
   content: 2,
   image: 2,
   clarify: 2,
+  policy: 3,
 };
 
 export const DEGRADE_TEXT = "未核对，不能当作事实";

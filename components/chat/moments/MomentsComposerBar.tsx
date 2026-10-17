@@ -35,7 +35,7 @@ export function MomentsComposerBar({
                 if (!disabled && !sending && value.trim()) onSend();
               }
             }}
-            placeholder="如：语气更活泼、文案缩短一半…"
+            placeholder="如：质保多久、便宜点、宽度不超过160厘米"
             className="min-h-0 min-w-0 flex-1 border-0 bg-transparent py-0 text-[0.88rem] font-medium text-slate-900 outline-none placeholder:text-slate-400 disabled:opacity-60"
           />
           <button

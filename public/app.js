@@ -20,6 +20,8 @@ let active = null;
 let guideTone = null;
 let memoryBook = {guide: [], customers: {'guest-a': [], 'guest-b': []}};
 let pendingLabel = '';
+let busy = false;
+let pendingOpen = null;
 
 const $ = selector => document.querySelector(selector);
 
@@ -60,11 +62,6 @@ function suggestions(state) {
   return [];
 }
 
-function preferredCustomer() {
-  const latest = [...sessionList].filter(item => item.revision > 0).sort((a, b) => b.updatedAt - a.updatedAt)[0];
-  return latest?.id || customerId;
-}
-
 function renderHome() {
   const latest = [...sessionList].filter(item => item.revision > 0).sort((a, b) => b.updatedAt - a.updatedAt)[0];
   const card = $('#continue-card');
@@ -89,12 +86,16 @@ function renderHome() {
   }
   const box = $('#home-prompts');
   box.replaceChildren();
+  const hint = document.createElement('p');
+  hint.className = 'pad muted';
+  hint.textContent = '点一条提问后，先选择要接待的顾客。不会写进另一位顾客的条件。';
+  box.append(hint);
   for (const text of prompts) {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'prompt tap';
     button.textContent = text;
-    button.addEventListener('click', () => ask(preferredCustomer(), text, 'search'));
+    button.addEventListener('click', () => openChooser({type: 'ask', text}));
     box.append(button);
   }
 }
@@ -212,7 +213,11 @@ function renderChat() {
       if (!product) continue;
       const card = document.createElement('article');
       card.className = 'product';
-      card.innerHTML = '<div class="placeholder">模拟商品</div>';
+      const photo = document.createElement('img');
+      photo.className = 'shot';
+      photo.alt = product.name + '示意图';
+      photo.src = '/products/' + product.id + '.png';
+      card.append(photo);
       const title = document.createElement('h2');
       title.textContent = product.name;
       const meta = document.createElement('p');
@@ -308,13 +313,25 @@ function renderChat() {
     shot.id = 'image-card';
     const title = document.createElement('h2');
     title.textContent = active.image.label || '演示回放、待核对';
-    const box = document.createElement('div');
-    box.className = 'placeholder';
-    box.textContent = '演示回放、待核对';
     const note = document.createElement('p');
     note.className = 'muted';
-    note.textContent = '没有调用生图接口。请求体已留好：模型、提示词、尺寸和张数，密钥不出现在页面上。';
-    shot.append(title, box, note);
+    if (active.image.url) {
+      const picture = document.createElement('img');
+      picture.className = 'shot';
+      picture.alt = '待核对的配图';
+      picture.src = active.image.url;
+      shot.append(title, picture);
+      note.textContent = '配图已返回，仍待核对。密钥不会出现在页面上。';
+    } else {
+      const box = document.createElement('div');
+      box.className = 'placeholder';
+      box.textContent = '演示回放、待核对';
+      shot.append(title, box);
+      note.textContent = active.image.called
+        ? '接口没有返回可用图片地址，仍待核对。密钥不会出现在页面上。'
+        : '没有调用生图接口。请求体已留好：模型、提示词、尺寸和张数，密钥不出现在页面上。';
+    }
+    shot.append(note);
     thread.append(shot);
   }
   const lines = constraintLines(state).filter(([, value]) => value !== '未填' && value !== '不限' && value !== '无');
@@ -449,9 +466,39 @@ async function forgetMemory(id, owner) {
 
 async function send(text) {
   const value = text.trim();
-  if (!value) return;
-  $('#message').value = '';
-  await post('/api/turn', {text: value});
+  if (!value || busy) return;
+  busy = true;
+  const input = $('#message');
+  input.value = '';
+  try {
+    const payload = await post('/api/turn', {text: value});
+    if (!payload && !input.value) input.value = value;
+  } finally {
+    busy = false;
+  }
+}
+
+function openChooser(job) {
+  pendingOpen = job;
+  $('#customer-sheet').hidden = false;
+}
+
+function closeChooser() {
+  pendingOpen = null;
+  $('#customer-sheet').hidden = true;
+}
+
+async function chooseCustomer(id) {
+  const job = pendingOpen;
+  closeChooser();
+  if (!job) return;
+  if (job.type === 'ask') {
+    await ask(id, job.text, 'search');
+    return;
+  }
+  await openChat(id, job.from || 'home');
+  scene = job.scene || 'search';
+  renderChat();
 }
 
 async function confirmProduct(productId) {
@@ -473,9 +520,13 @@ $('#chat-settings').addEventListener('click', () => { renderSettings(); show('se
 $('#settings-back').addEventListener('click', () => show(backTo === 'settings' ? 'home' : backTo));
 $('#chat-back').addEventListener('click', () => show(backTo));
 $('#sessions-home').addEventListener('click', () => show('home'));
-$('#open-search').addEventListener('click', () => openChat(preferredCustomer(), 'home').then(() => { scene = 'search'; renderChat(); }));
-$('#open-copy').addEventListener('click', () => openChat(preferredCustomer(), 'home').then(() => { scene = 'copy'; renderChat(); }));
-$('#new-chat').addEventListener('click', () => openChat(preferredCustomer(), 'sessions'));
+$('#open-search').addEventListener('click', () => openChooser({type: 'open', scene: 'search', from: 'home'}));
+$('#open-copy').addEventListener('click', () => openChooser({type: 'open', scene: 'copy', from: 'home'}));
+$('#new-chat').addEventListener('click', () => openChooser({type: 'open', scene: 'search', from: 'sessions'}));
+$('#customer-cancel').addEventListener('click', closeChooser);
+for (const button of document.querySelectorAll('[data-customer]')) {
+  button.addEventListener('click', () => chooseCustomer(button.dataset.customer));
+}
 $('#composer').addEventListener('submit', event => {
   event.preventDefault();
   send($('#message').value);

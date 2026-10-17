@@ -213,6 +213,7 @@ async function handleApi(request, response, url) {
       pending_human: true,
       label: generated.label,
       product_id: product.id,
+      url: generated.url || '',
       request: generated.request
     };
     remember(session.record, {role: 'assistant', text: generated.simulation ? '配图仍是演示回放，待核对，没有调用生图接口。' : '配图已请求，结果仍待核对。'});

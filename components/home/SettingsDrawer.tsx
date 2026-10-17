@@ -62,6 +62,7 @@ export function SettingsDrawer({ open, onClose, profile }: SettingsDrawerProps) 
 
   const handleLogout = () => {
     logout();
+    setRole("guide");
     setPassword("");
     setLoginError(null);
   };
@@ -162,7 +163,6 @@ export function SettingsDrawer({ open, onClose, profile }: SettingsDrawerProps) 
                 <p className="mt-2.5 text-[0.65rem] leading-relaxed text-slate-500">
                   本地演示身份，不连接外部账号，页面不填写模型密钥。
                 </p>
-                <MemoryPanel />
               </form>
               <div className="mt-4 flex items-start gap-3 rounded-xl border border-dashed border-slate-200/90 bg-white/80 px-3 py-3">
                 <div
@@ -182,6 +182,7 @@ export function SettingsDrawer({ open, onClose, profile }: SettingsDrawerProps) 
               </div>
             </>
           )}
+          {hydrated ? <MemoryPanel /> : null}
         </div>
       </aside>
     </PhoneFrameOverlay>,

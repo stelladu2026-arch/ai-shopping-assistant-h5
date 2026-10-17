@@ -160,7 +160,7 @@ button, input { font: inherit; color: inherit; }
 .bubble.user { align-self: flex-end; background: var(--blue-soft); }
 .bubble.assistant { align-self: flex-start; background: white; border: 1px solid var(--line); }
 .product, .draft { background: white; border: 1px solid var(--line); border-radius: 16px; padding: 12px; }
-.placeholder {
+.placeholder, .shot {
   height: 148px;
   border-radius: 12px;
   display: grid;
@@ -168,6 +168,24 @@ button, input { font: inherit; color: inherit; }
   color: var(--muted);
   background: repeating-linear-gradient(135deg, #f4f7fb, #f4f7fb 12px, #e8eef6 12px, #e8eef6 24px);
 }
+.shot { width: 100%; object-fit: cover; display: block; background: #f4f7fb; }
+.chooser {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: flex;
+  align-items: flex-end;
+  background: rgba(15, 23, 42, 0.35);
+}
+.chooser[hidden] { display: none; }
+.chooser-card {
+  width: 100%;
+  padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+  border-radius: 16px 16px 0 0;
+  background: white;
+}
+.chooser-title { margin: 0 0 4px; font-weight: 700; }
+.chooser-card .confirm { margin-top: 8px; }
 .product h2, .draft h2 { margin: 10px 0 4px; font-size: 17px; }
 .price { margin: 4px 0; font-size: 18px; font-weight: 700; }
 .reason { margin: 6px 0; font-size: 14px; }

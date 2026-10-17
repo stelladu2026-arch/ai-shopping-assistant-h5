@@ -13,6 +13,10 @@ const MODELS = [...new Set(catalog.map((item) => item.model))].sort((a, b) => b.
 export const MISS_TEXT = "没有检索到门店资料，不能编造说明。";
 const STORE_DOC_QUESTION = /售后|坏了|维修|退换|退货|换货|质保|保修多久|禁止承诺|不能承诺|活动叠加|能不能叠加|怎么叠加/;
 
+export function isStorePolicyQuestion(text) {
+  return STORE_DOC_QUESTION.test(String(text || ""));
+}
+
 function splitDocument(raw) {
   const matched = String(raw || "").match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
   if (!matched) return { meta: {}, body: String(raw || "") };
