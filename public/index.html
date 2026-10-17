@@ -69,7 +69,7 @@
       <main id="thread" class="thread"></main>
       <div id="suggest" class="suggest"></div>
       <form id="composer" class="composer">
-        <input id="message" name="message" autocomplete="off" enterkeyhint="send" placeholder="说说这位顾客的预算、尺寸或颜色">
+        <input id="message" name="message" autocomplete="off" enterkeyhint="send" placeholder="说说预算、尺寸或颜色">
         <button class="send tap" type="submit">发送</button>
       </form>
     </section>
@@ -85,17 +85,15 @@
         <div class="card pad" id="mode-card"></div>
         <h2 class="kicker">导购语气</h2>
         <div class="card pad">
-          <p id="tone-line" class="muted">还没有记住语气。这是导购自己的偏好，不会写进顾客的选品条件。</p>
+          <p id="tone-line" class="muted">还没有记住语气。这是导购自己的偏好，不会写进这次选品条件。</p>
           <div class="row">
             <button type="button" class="chip-btn tap" data-tone="简洁">记住简洁</button>
             <button type="button" class="chip-btn tap" data-tone="热情">记住热情</button>
             <button type="button" class="chip-btn tap" id="forget-tone">删除</button>
           </div>
         </div>
-        <h2 class="kicker">顾客记忆</h2>
+        <h2 class="kicker">记下的内容</h2>
         <div class="card pad" id="memory-card"></div>
-        <h2 class="kicker">顾客隔离</h2>
-        <div class="card pad muted">小陈和林女士各有一份选品会话和记忆。清空会话不会删除已记住的内容；删除只作用于点到的那一条。</div>
       </main>
     </section>
 
