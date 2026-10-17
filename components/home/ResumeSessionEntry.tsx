@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ChevronRightIcon } from "@/components/icons/ChevronRightIcon";
-import { getLastActiveSessionId } from "@/lib/sessions";
+import { getLastActiveSessionId, pullSharedSessions } from "@/lib/sessions";
 
 interface ResumeSessionEntryProps {
   sectionTitle: string;
@@ -13,7 +13,7 @@ export function ResumeSessionEntry({ sectionTitle }: ResumeSessionEntryProps) {
   const [lastSessionId, setLastSessionId] = useState<string | null>(null);
 
   useEffect(() => {
-    setLastSessionId(getLastActiveSessionId());
+    void pullSharedSessions().finally(() => setLastSessionId(getLastActiveSessionId()));
   }, []);
 
   return (

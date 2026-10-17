@@ -4,11 +4,10 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAppSettings } from "@/hooks/useAppSettings";
 import { getFollowUpOverride } from "@/lib/managerInsightsStorage";
-import { deleteSession, listSessions } from "@/lib/sessions";
+import { deleteSession, importSharedSessions, listSessions } from "@/lib/sessions";
 import { listFavorites, mergeServerFavorites, removeFavoriteById } from "@/lib/favorites";
 import type { FavoriteRecord } from "@/types/session";
-import { storeSessionSummariesMock } from "@/mock/storeInsights";
-import type { SessionCenterScope, StoreSessionSummaryItem } from "@/types/store-insights";
+import type { SessionCenterScope, StoreDashboardMetrics, StoreSessionSummaryItem } from "@/types/store-insights";
 import { EmptyState } from "@/components/sessions/EmptyState";
 import { FavoriteDrawer } from "@/components/sessions/FavoriteDrawer";
 import { FavoriteListItem } from "@/components/sessions/FavoriteListItem";
@@ -77,6 +76,8 @@ export function SessionsCenterView({ onToast }: SessionsCenterViewProps) {
   const [scope, setScope] = useState<SessionCenterScope>("mine");
   const [detailId, setDetailId] = useState<string | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [storeSummaries, setStoreSummaries] = useState<StoreSessionSummaryItem[]>([]);
+  const [storeMetrics, setStoreMetrics] = useState<StoreDashboardMetrics | null>(null);
 
   const { isManager, isGuide, hydrated: settingsHydrated } = useAppSettings();
 
@@ -108,11 +109,11 @@ export function SessionsCenterView({ onToast }: SessionsCenterViewProps) {
 
   const mergedSummaries: StoreSessionSummaryItem[] = useMemo(() => {
     void tick;
-    return storeSessionSummariesMock.map((s) => ({
+    return storeSummaries.map((s) => ({
       ...s,
       followUpStatus: getFollowUpOverride(s.id) ?? s.followUpStatus,
     }));
-  }, [tick]);
+  }, [tick, storeSummaries]);
 
   const detailSummary = useMemo(
     () => (detailId ? mergedSummaries.find((s) => s.id === detailId) ?? null : null),
@@ -129,6 +130,18 @@ export function SessionsCenterView({ onToast }: SessionsCenterViewProps) {
         refresh();
       })
       .catch(() => undefined);
+    void fetch("/api/guide/store")
+      .then((response) => response.json())
+      .then((payload) => {
+        importSharedSessions(payload.shares || []);
+        setStoreSummaries(payload.summaries || []);
+        setStoreMetrics(payload.metrics || null);
+        refresh();
+      })
+      .catch(() => {
+        setStoreSummaries([]);
+        setStoreMetrics(null);
+      });
   }, [refresh]);
 
   const handleDeleteSession = useCallback(
@@ -194,13 +207,17 @@ export function SessionsCenterView({ onToast }: SessionsCenterViewProps) {
 
           {isManager && scope === "store" ? (
             <div className="min-h-0 flex-1 px-3 pt-3">
-              <StoreInsightsDashboard />
-              <StoreSessionSummaryList
-                items={mergedSummaries}
-                onOpen={(row) => {
-                  setDetailId(row.id);
-                }}
-              />
+              <StoreInsightsDashboard metrics={storeMetrics} />
+              {mergedSummaries.length === 0 ? (
+                <p className="mt-6 px-1 text-[0.82rem] leading-relaxed text-slate-500">还没有导购产生的会话。</p>
+              ) : (
+                <StoreSessionSummaryList
+                  items={mergedSummaries}
+                  onOpen={(row) => {
+                    setDetailId(row.id);
+                  }}
+                />
+              )}
             </div>
           ) : (
             <>

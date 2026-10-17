@@ -1,5 +1,11 @@
 import assert from 'node:assert/strict';
-import {start} from '../server/index.mjs';
+import {mkdtempSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import path from 'node:path';
+
+process.env.GUIDE_SQLITE_FILE = path.join(mkdtempSync(path.join(tmpdir(), 'guide-h5-')), 'guide.sqlite');
+const {start} = await import('../server/index.mjs');
+const store = await import('../server/store.mjs');
 
 const server = await start(0);
 const port = server.address().port;
@@ -69,5 +75,62 @@ const cleared = await read('/api/session/name', {
 assert.equal(cleared.body.title, '只看餐桌，预算3000元');
 assert.equal(cleared.body.customer_name, '');
 
+const current = await read('/api/session?session_id=' + id);
+const productId = current.body.state.candidate_ids[0];
+const confirmed = await read('/api/confirm', {
+  method: 'POST',
+  headers: {'Content-Type': 'application/json'},
+  body: JSON.stringify({session_id: id, product_id: productId, revision: current.body.state.revision})
+});
+assert.equal(confirmed.status, 200);
+const keptId = confirmed.body.state.confirmed_product_id;
+const policy = await read('/api/turn', {
+  method: 'POST',
+  headers: {'Content-Type': 'application/json'},
+  body: JSON.stringify({session_id: id, text: '沙发质保多久', revision: confirmed.body.state.revision})
+});
+assert.equal(policy.status, 200);
+assert.equal(policy.body.state.confirmed_product_id, keptId);
+assert.equal(policy.body.state.constraints.category, '餐桌');
+assert.match(policy.body.reply, /终身保修/);
+assert.equal(policy.body.state.candidate_ids.some(item => String(item).startsWith('S')), false);
+
+const saved = await read('/api/favorites', {
+  method: 'POST',
+  headers: {'Content-Type': 'application/json'},
+  body: JSON.stringify({session_id: id, source_id: 'product:' + keptId, kind: 'product', title: '原木餐桌', content: '已确认的餐桌'})
+});
+assert.equal(saved.body.favorites.some(item => item.title === '原木餐桌'), true);
+
+store.saveSession('sess_next', {
+  state: createStateSafe(),
+  messages: [],
+  customerName: '小陈',
+  transcript: {title: '小陈', sceneMode: 'moments_marketing', messagesMoments: [{role: 'user', text: '想看床'}], messagesRag: []},
+  updatedAt: Date.now()
+});
+const shared = await read('/api/sessions');
+assert.equal(shared.body.sessions.some(item => item.name === '小陈'), true);
+assert.equal(shared.body.favorites.some(item => item.title === '原木餐桌'), true);
+
 server.close();
+const restarted = await start(0);
+const again = await fetch('http://127.0.0.1:' + restarted.address().port + '/api/sessions').then(response => response.json());
+assert.equal(again.sessions.some(item => item.id === id), true);
+assert.equal(again.sessions.some(item => item.name === '小陈'), true);
+assert.equal(again.favorites.some(item => item.title === '原木餐桌'), true);
+restarted.close();
 console.log('ok h5 sessions');
+
+function createStateSafe() {
+  return {
+    revision: 0,
+    constraints: {budget_max_cny: null, width_max_cm: null, category: null, color: null, exclude_material: null},
+    candidate_ids: [],
+    confirmed_product_id: null,
+    confirmed_product_version: null,
+    pending_question: null,
+    card: null,
+    copy_requirement: null
+  };
+}

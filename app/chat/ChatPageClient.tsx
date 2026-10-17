@@ -243,6 +243,7 @@ export function ChatPageClient() {
         body: JSON.stringify({
           action: "sync",
           sessionId,
+          customerName: getSession(sessionId)?.customerName || "",
           transcript: {
             title: sessionTitleFor(sessionId, moments, rag),
             sceneMode,

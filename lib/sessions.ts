@@ -186,6 +186,61 @@ export function deleteSession(id: string): void {
   }
 }
 
+export function importSharedSessions(
+  shares: Array<{
+    id?: string;
+    title?: string;
+    customerName?: string;
+    sceneMode?: AgentScene;
+    messages?: Array<{ role?: string; text?: string }>;
+  }>,
+): void {
+  if (typeof window === "undefined" || !Array.isArray(shares)) return;
+  for (const share of shares) {
+    if (!share?.id) continue;
+    const messages = (share.messages || []).filter((item) => item?.text?.trim());
+    const customerName = String(share.customerName || "").trim();
+    if (!messages.length && !customerName) continue;
+    const sceneMode: AgentScene = share.sceneMode === "store_rag_query" ? "store_rag_query" : "moments_marketing";
+    const chatMessages: ChatMessage[] = messages.map((item, index) => ({
+      id: `${share.id}_${index}`,
+      role: item.role === "assistant" ? "assistant" : "user",
+      text: item.role === "assistant" ? "" : item.text,
+      leadText: item.role === "assistant" ? item.text : undefined,
+    }));
+    const existing = getSession(share.id);
+    const title = customerName || share.title || "";
+    if (
+      existing &&
+      sessionMessagesCombined(existing).length >= chatMessages.length &&
+      (existing.customerName || "") === customerName
+    ) {
+      continue;
+    }
+    const record = buildSessionRecord(
+      share.id,
+      sceneMode === "store_rag_query" ? [] : chatMessages,
+      sceneMode === "store_rag_query" ? chatMessages : [],
+      sceneMode,
+    );
+    record.customerName = customerName || undefined;
+    record.title = title || record.title;
+    upsertSession(record);
+  }
+}
+
+export async function pullSharedSessions(): Promise<void> {
+  if (typeof window === "undefined") return;
+  try {
+    const response = await fetch("/api/guide/store");
+    if (!response.ok) return;
+    const payload = (await response.json()) as { shares?: Parameters<typeof importSharedSessions>[0] };
+    importSharedSessions(payload.shares || []);
+  } catch {
+    /* 共享会话暂时读不到时，本地列表保持原样 */
+  }
+}
+
 export function upsertSession(record: ChatSessionRecord): void {
   if (typeof window === "undefined") return;
   const list = listSessions().filter((s) => s.id !== record.id);

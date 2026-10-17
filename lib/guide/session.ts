@@ -299,6 +299,7 @@ export async function guideAct(body) {
     result = { ok: true, leadText: null, structured: snapshot(session, memory), memory, steps: loadSteps(session.id) };
   } else if (action === "sync") {
     session.record.transcript = body.transcript || null;
+    if (body.customerName != null) session.record.customerName = String(body.customerName || "").trim().slice(0, 20);
     result = { ok: true, leadText: null };
   } else if (action === "load") {
     result = { ok: true, transcript: session.record.transcript || null, structured: snapshot(session, memory) };

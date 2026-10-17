@@ -12,6 +12,8 @@ let backTo = 'home';
 let catalog = [];
 let model = {mode: 'simulation'};
 let sessionList = [];
+let favoriteList = [];
+let hubTab = 'recent';
 let active = null;
 let guideTone = null;
 let memoryBook = {guide: [], sessions: {}};
@@ -94,7 +96,44 @@ function renderHome() {
   }
 }
 
+function renderFavorites() {
+  const list = $('#session-list');
+  list.replaceChildren();
+  if (!favoriteList.length) {
+    const empty = document.createElement('p');
+    empty.className = 'pad muted';
+    empty.textContent = '还没有收藏。确认商品或生成话术后可以收藏。';
+    list.append(empty);
+    return;
+  }
+  for (const item of favoriteList) {
+    const row = document.createElement('div');
+    row.className = 'session';
+    const span = document.createElement('span');
+    const title = document.createElement('strong');
+    title.textContent = item.title;
+    const preview = document.createElement('small');
+    preview.textContent = item.content;
+    span.append(title, preview);
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'text-btn tap';
+    remove.textContent = '取消收藏';
+    remove.addEventListener('click', () => toggleFavorite(item.source_id, item.kind, item.title, item.content));
+    row.append(span, remove);
+    list.append(row);
+  }
+}
+
 function renderSessions() {
+  $('#tab-recent').classList.toggle('is-on', hubTab === 'recent');
+  $('#tab-favorites').classList.toggle('is-on', hubTab === 'favorites');
+  $('#tab-recent').setAttribute('aria-pressed', String(hubTab === 'recent'));
+  $('#tab-favorites').setAttribute('aria-pressed', String(hubTab === 'favorites'));
+  if (hubTab === 'favorites') {
+    renderFavorites();
+    return;
+  }
   const list = $('#session-list');
   list.replaceChildren();
   if (!sessionList.length) {
@@ -190,6 +229,16 @@ function reasonFor(product, state) {
   return parts.join('，') + '。理由只来自商品资料。';
 }
 
+function favoriteButton(sourceId, kind, title, content) {
+  const saved = favoriteList.some(item => item.source_id === sourceId);
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'chip-btn tap';
+  button.textContent = saved ? '已收藏' : '收藏';
+  button.addEventListener('click', () => toggleFavorite(sourceId, kind, title, content));
+  return button;
+}
+
 function renderChat() {
   const customerName = active?.customer_name || '';
   $('#chat-title').textContent = customerName || (scene === 'copy' ? '推荐话术' : '选品推荐');
@@ -272,7 +321,8 @@ function renderChat() {
         button.className = 'confirm tap';
         button.textContent = '确认这件商品';
         button.addEventListener('click', () => confirmProduct(product.id));
-        card.append(title, meta, price, reason, button);
+        const save = favoriteButton('product:' + product.id, 'product', product.name, reason.textContent);
+        card.append(title, meta, price, reason, button, save);
       }
       thread.append(card);
     }
@@ -334,7 +384,8 @@ function renderChat() {
     picture.id = 'make-image';
     picture.textContent = '生成配图';
     picture.addEventListener('click', () => withPending('正在准备配图…', () => post('/api/image', {})));
-    actions.append(copy, again, picture);
+    const saveCopy = favoriteButton('copy:' + sessionId, 'material', '推荐话术', state.card.text);
+    actions.append(copy, again, picture, saveCopy);
     draft.append(actions);
     thread.append(draft);
   }
@@ -414,6 +465,7 @@ function renderChat() {
 async function refreshSessions() {
   const payload = await fetch('/api/sessions').then(response => response.json());
   sessionList = payload.sessions;
+  favoriteList = payload.favorites || [];
   guideTone = payload.guide_tone;
   memoryBook = payload.memory || memoryBook;
   renderHome();
@@ -554,6 +606,18 @@ async function renameSession(id, name) {
   if (screen === 'chat') renderChat();
 }
 
+async function toggleFavorite(sourceId, kind, title, content) {
+  if (!sessionId && !favoriteList.some(item => item.source_id === sourceId)) return;
+  const owner = favoriteList.find(item => item.source_id === sourceId)?.session_id || sessionId;
+  await fetch('/api/favorites', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({session_id: owner, source_id: sourceId, kind, title, content})
+  });
+  await refreshSessions();
+  if (screen === 'chat') renderChat();
+}
+
 async function resetSession(id) {
   await fetch('/api/reset', {
     method: 'POST',
@@ -585,6 +649,8 @@ $('#rename-clear').addEventListener('click', async () => {
   if (id) await renameSession(id, '');
 });
 $('#rename-cancel').addEventListener('click', closeRename);
+$('#tab-recent').addEventListener('click', () => { hubTab = 'recent'; renderSessions(); });
+$('#tab-favorites').addEventListener('click', () => { hubTab = 'favorites'; renderSessions(); });
 $('#open-search').addEventListener('click', () => openNew('home', 'search'));
 $('#open-copy').addEventListener('click', () => openNew('home', 'copy'));
 $('#new-chat').addEventListener('click', () => openNew('sessions', 'search'));
