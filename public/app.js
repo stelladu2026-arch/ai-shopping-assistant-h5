@@ -21,7 +21,6 @@ let guideTone = null;
 let memoryBook = {guide: [], customers: {'guest-a': [], 'guest-b': []}};
 let pendingLabel = '';
 let busy = false;
-let pendingOpen = null;
 
 const $ = selector => document.querySelector(selector);
 
@@ -62,6 +61,11 @@ function suggestions(state) {
   return [];
 }
 
+function preferredCustomer() {
+  const latest = [...sessionList].filter(item => item.revision > 0).sort((a, b) => b.updatedAt - a.updatedAt)[0];
+  return latest?.id || customerId;
+}
+
 function renderHome() {
   const latest = [...sessionList].filter(item => item.revision > 0).sort((a, b) => b.updatedAt - a.updatedAt)[0];
   const card = $('#continue-card');
@@ -86,16 +90,12 @@ function renderHome() {
   }
   const box = $('#home-prompts');
   box.replaceChildren();
-  const hint = document.createElement('p');
-  hint.className = 'pad muted';
-  hint.textContent = '点一条提问后，先选择要接待的顾客。不会写进另一位顾客的条件。';
-  box.append(hint);
   for (const text of prompts) {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'prompt tap';
     button.textContent = text;
-    button.addEventListener('click', () => openChooser({type: 'ask', text}));
+    button.addEventListener('click', () => ask(preferredCustomer(), text, 'search'));
     box.append(button);
   }
 }
@@ -478,29 +478,6 @@ async function send(text) {
   }
 }
 
-function openChooser(job) {
-  pendingOpen = job;
-  $('#customer-sheet').hidden = false;
-}
-
-function closeChooser() {
-  pendingOpen = null;
-  $('#customer-sheet').hidden = true;
-}
-
-async function chooseCustomer(id) {
-  const job = pendingOpen;
-  closeChooser();
-  if (!job) return;
-  if (job.type === 'ask') {
-    await ask(id, job.text, 'search');
-    return;
-  }
-  await openChat(id, job.from || 'home');
-  scene = job.scene || 'search';
-  renderChat();
-}
-
 async function confirmProduct(productId) {
   await post('/api/confirm', {product_id: productId});
 }
@@ -520,13 +497,9 @@ $('#chat-settings').addEventListener('click', () => { renderSettings(); show('se
 $('#settings-back').addEventListener('click', () => show(backTo === 'settings' ? 'home' : backTo));
 $('#chat-back').addEventListener('click', () => show(backTo));
 $('#sessions-home').addEventListener('click', () => show('home'));
-$('#open-search').addEventListener('click', () => openChooser({type: 'open', scene: 'search', from: 'home'}));
-$('#open-copy').addEventListener('click', () => openChooser({type: 'open', scene: 'copy', from: 'home'}));
-$('#new-chat').addEventListener('click', () => openChooser({type: 'open', scene: 'search', from: 'sessions'}));
-$('#customer-cancel').addEventListener('click', closeChooser);
-for (const button of document.querySelectorAll('[data-customer]')) {
-  button.addEventListener('click', () => chooseCustomer(button.dataset.customer));
-}
+$('#open-search').addEventListener('click', () => openChat(preferredCustomer(), 'home').then(() => { scene = 'search'; renderChat(); }));
+$('#open-copy').addEventListener('click', () => openChat(preferredCustomer(), 'home').then(() => { scene = 'copy'; renderChat(); }));
+$('#new-chat').addEventListener('click', () => openChat(preferredCustomer(), 'sessions'));
 $('#composer').addEventListener('submit', event => {
   event.preventDefault();
   send($('#message').value);
