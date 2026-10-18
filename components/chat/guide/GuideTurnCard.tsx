@@ -4,14 +4,16 @@ import type { GuideTurnBlock } from "@/types/agent";
 import { ConstraintTags } from "@/components/chat/guide/ConstraintTags";
 import { GuideProcess } from "@/components/chat/guide/GuideProcess";
 import { SelectionProducts } from "@/components/chat/guide/ProductStrip";
+import { repeatsAssistantReply } from "@/lib/chat/replyDedupe";
 
 interface GuideTurnCardProps {
   data: GuideTurnBlock;
+  leadText?: string;
   disabled?: boolean;
   onAction: (body: Record<string, unknown>) => void;
 }
 
-export function GuideTurnCard({ data, disabled, onAction }: GuideTurnCardProps) {
+export function GuideTurnCard({ data, leadText, disabled, onAction }: GuideTurnCardProps) {
   const constraints = data.constraints;
   const lines = [
     constraints?.budget_max_cny != null ? `预算${constraints.budget_max_cny}元` : "",
@@ -23,6 +25,11 @@ export function GuideTurnCard({ data, disabled, onAction }: GuideTurnCardProps) 
 
   const replacing = Boolean(data.offerSwitch && data.confirmedId);
   const facts = data.confirmedFacts;
+  const pendingQuestion = data.pendingQuestion && !repeatsAssistantReply(data.pendingQuestion, leadText)
+    ? data.pendingQuestion
+    : "";
+  const primaryReply = (leadText || "").trim() || pendingQuestion;
+  const basis = data.basis && !repeatsAssistantReply(data.basis, primaryReply) ? data.basis : "";
 
   return (
     <div className="mt-2 space-y-3">
@@ -33,8 +40,8 @@ export function GuideTurnCard({ data, disabled, onAction }: GuideTurnCardProps) 
         revision={data.revision}
         onAction={onAction}
       />
-      {data.pendingQuestion ? (
-        <p className="rounded-xl bg-orange-50 px-3 py-3 text-[0.84rem] font-semibold leading-relaxed text-orange-900">{data.pendingQuestion}</p>
+      {pendingQuestion ? (
+        <p className="rounded-xl bg-orange-50 px-3 py-3 text-[0.84rem] font-semibold leading-relaxed text-orange-900">{pendingQuestion}</p>
       ) : null}
       <SelectionProducts
         products={data.products}
@@ -55,7 +62,7 @@ export function GuideTurnCard({ data, disabled, onAction }: GuideTurnCardProps) 
         </button>
       ) : null}
 
-      {data.basis ? <p className="px-1 text-[0.78rem] leading-relaxed text-slate-600">{data.basis}</p> : null}
+      {basis ? <p className="px-1 text-[0.78rem] leading-relaxed text-slate-600">{basis}</p> : null}
 
       {data.confirmedName ? (
         <article className="rounded-saas border border-slate-200/70 bg-white px-3 py-3 shadow-surface">
