@@ -282,6 +282,26 @@ button, input { font: inherit; color: inherit; }
 }
 .facts summary { min-height: var(--control); display: flex; align-items: center; font-size: 14px; font-weight: 650; }
 .fact { margin: 0 0 8px; font-size: 14px; }
+.fact-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+.fact-name { min-width: 4.5rem; font-size: 14px; font-weight: 650; }
+.fact-row input {
+  width: 6.5rem;
+  min-height: var(--control);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0 8px;
+  background: white;
+}
+.fact-row .chip-btn { min-height: 44px; }
+.fact-row .save { background: var(--blue); color: white; border-color: transparent; }
+.fact-row .save:disabled { opacity: 0.4; }
+.fact-row .remove { color: #9a3412; }
 .thread { display: flex; flex-direction: column; gap: 12px; padding: 16px; }
 .thread > * { scroll-margin-top: 72px; scroll-margin-bottom: calc(7.5rem + env(safe-area-inset-bottom)); }
 .bubble { max-width: 86%; margin: 0; padding: 12px 14px; border-radius: 16px; font-size: 15px; }

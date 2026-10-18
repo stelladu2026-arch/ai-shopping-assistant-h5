@@ -308,14 +308,23 @@ function parseWidth(text) {
     else if (/一米五/.test(part)) found = {value: 150};
     else if (/两米|二米/.test(part)) found = {value: 200};
     else {
-      const matched = part.match(/(\d+(?:\.\d+)?)\s*(厘米|cm|米)/i);
+      const matched = part.match(/(\d+(?:\.\d+)?)\s*(厘米|cm|米)/i) || (/宽/.test(part) ? part.match(/宽[^0-9]{0,8}(\d+(?:\.\d+)?)/) : null);
       if (!matched) continue;
       if (/不是/.test(part) && !/还是|上限/.test(part)) continue;
       const amount = Number(matched[1]);
-      found = {value: matched[2] === '米' ? Math.round(amount * 100) : amount};
+      const unit = matched[2] || '厘米';
+      found = {value: unit === '米' ? Math.round(amount * 100) : amount};
     }
   }
   return found;
+}
+
+function clearsBudget(text) {
+  return /预算不限|不限预算/.test(text);
+}
+
+function clearsCategory(text) {
+  return /品类不限|不限品类/.test(text);
 }
 
 function parseBudget(text) {
@@ -363,7 +372,11 @@ function parseColor(text) {
 }
 
 function parseMaterial(text) {
-  if (/皮质也可以|可以皮质|材质不限/.test(text)) return {clear: true};
+  if (/皮质也可以|可以皮质|材质不限|排除不限|不限材质|不限排除/.test(text)) return {clear: true};
+  const names = ['皮质', '布艺', '橡木', '松木', '板材', '胡桃木', '岩板'];
+  if (names.some((item) => new RegExp('(?:去掉|取消)(?:不要)?' + item).test(text) || new RegExp('不要排除' + item).test(text))) {
+    return {clear: true};
+  }
   const excluded = ['皮质', '布艺', '橡木', '松木'].filter(item => new RegExp('不要' + item).test(text));
   if (excluded.length > 1) return {ambiguous: excluded};
   if (excluded.length === 1) return {value: excluded[0]};
@@ -483,7 +496,7 @@ function unmatchedLookup(text) {
     if (text.includes(item.name) || text.includes(item.model)) return null;
   }
   const rest = text
-    .replace(/预算|上限|最多|不超过|不少于|宽度|尺寸|颜色|材质|品类|只看|改看|改为|改成|换一款|重新选|便宜点|小户型|不要|排除|浅色|米白|浅灰|深绿|原木|皮质|布艺|橡木|松木|北欧|日式|现代|轻奢|简约|自然|复古|中式|沙发|餐桌|休闲椅|床架|床头柜|柜子|椅子|柜|其他|保持|不变|也可以|不限|文案|话术|发布|下单|朋友圈|确认|商品|名称|型号|不是|还是|提高|以内|直接|你自己|选好|帮我|写它|请|想买|适合|最好|优先|尽量|喜欢|偏好|可以的话|必须|一定要|只能|只要|是|色|的|元|厘米|cm|米/gi, "")
+    .replace(/预算|上限|最多|不超过|不少于|宽度|尺寸|颜色|材质|品类|只看|改看|改为|改成|换一款|重新选|便宜点|小户型|去掉|取消|不要|排除|浅色|米白|浅灰|深绿|原木|皮质|布艺|橡木|松木|北欧|日式|现代|轻奢|简约|自然|复古|中式|沙发|餐桌|休闲椅|床架|床头柜|柜子|椅子|柜|其他|保持|不变|也可以|不限|文案|话术|发布|下单|朋友圈|确认|商品|名称|型号|不是|还是|提高|以内|直接|你自己|选好|帮我|写它|请|想买|适合|最好|优先|尽量|喜欢|偏好|可以的话|必须|一定要|只能|只要|是|色|的|元|厘米|cm|米/gi, "")
     .replace(/[零一二三四五六七八九十百千万两]/g, "")
     .replace(/[\d\s，,。；;、．.！!？?（）()]/g, "");
   return rest.length >= 2 ? rest.slice(0, 16) : null;
@@ -504,7 +517,9 @@ export function absorbDemand(state, text, clientRevision, interpretation = null)
   if (width?.clear) next.constraints.width_max_cm = null;
   else if (width?.value != null) next.constraints.width_max_cm = width.value;
   if (budget != null) next.constraints.budget_max_cny = budget;
+  else if (clearsBudget(text)) next.constraints.budget_max_cny = null;
   if (category) next.constraints.category = category;
+  else if (clearsCategory(text)) next.constraints.category = null;
   if (color?.clear) next.constraints.color = null;
   else if (color?.value) next.constraints.color = color.value;
   if (material?.clear) {
@@ -538,7 +553,7 @@ export function absorbDemand(state, text, clientRevision, interpretation = null)
     return {ok: true, state: next, needsResearch: false, changed, reply: next.pending_question};
   }
   const unknownName = !copy.asked && !cheaper && !smallHome && !switchProduct
-    ? (read.interpreted ? (read.unresolved?.[0] || null) : unmatchedLookup(text))
+    ? (read.interpreted ? ((read.unresolved || []).find((item) => item && !/^(去掉|取消|不限|改成|改为|其他|保持)$/.test(item)) || null) : unmatchedLookup(text))
     : null;
   if (material?.ambiguous) {
     next.pending_question = '还缺要排除的那一种材质。下一步：只回复一种，例如不要皮质。当前不能同时排除两种。';
@@ -587,7 +602,9 @@ export function applyTurn(state, text, clientRevision, interpretation = null) {
   if (width?.clear) next.constraints.width_max_cm = null;
   else if (width?.value != null) next.constraints.width_max_cm = width.value;
   if (budget != null) next.constraints.budget_max_cny = budget;
+  else if (clearsBudget(text)) next.constraints.budget_max_cny = null;
   if (category) next.constraints.category = category;
+  else if (clearsCategory(text)) next.constraints.category = null;
   if (color?.clear) next.constraints.color = null;
   else if (color?.value) next.constraints.color = color.value;
   if (material?.clear) {

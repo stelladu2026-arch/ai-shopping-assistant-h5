@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 interface ConstraintTag {
   field: string;
@@ -46,49 +46,49 @@ function TagEditor({
 }) {
   const numeric = tag.field === "budget_max_cny" || tag.field === "width_max_cm";
   const [draft, setDraft] = useState(String(tag.value));
+  useEffect(() => {
+    setDraft(String(tag.value));
+  }, [tag.field, tag.value]);
   const nextStrength = tag.strength === "hard" ? "prefer" : "hard";
+  const dirty = draft.trim() !== "" && draft.trim() !== String(tag.value);
 
   return (
-    <span className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-full border border-slate-200 bg-white py-1 pl-2 pr-1">
+    <div className="flex max-w-full flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-2 py-2">
       <span className="text-[0.78rem] font-semibold text-slate-800">{tag.label}</span>
-      {numeric ? (
-        <input
-          value={draft}
-          disabled={disabled}
-          inputMode="numeric"
-          aria-label={`修改${tag.label}`}
-          onChange={(event) => setDraft(event.target.value)}
-          className="h-7 w-16 rounded-md border border-slate-200 px-1 text-[0.75rem]"
-        />
-      ) : null}
-      {numeric ? (
-        <button
-          type="button"
-          disabled={disabled || draft === String(tag.value)}
-          onClick={() => onAction({ action: "edit-constraint", field: tag.field, value: draft, strength: tag.strength, revision })}
-          className="min-h-7 rounded-full px-2 text-[0.72rem] font-bold text-brand-800 disabled:opacity-40"
-        >
-          保存
-        </button>
-      ) : null}
+      <input
+        value={draft}
+        disabled={disabled}
+        inputMode={numeric ? "numeric" : "text"}
+        aria-label={`修改${tag.label}`}
+        onChange={(event) => setDraft(event.target.value)}
+        className="h-11 w-24 rounded-lg border border-slate-200 px-2 text-[0.8rem]"
+      />
       <button
         type="button"
-        disabled={disabled}
-        onClick={() => onAction({ action: "edit-constraint", field: tag.field, strength: nextStrength, revision })}
-        className="min-h-7 rounded-full bg-slate-100 px-2 text-[0.72rem] font-bold text-slate-700"
+        disabled={disabled || !dirty}
+        onClick={() => onAction({ action: "edit-constraint", field: tag.field, value: draft.trim(), strength: tag.strength, revision })}
+        className="min-h-11 rounded-full bg-brand-600 px-3 text-[0.78rem] font-bold text-white disabled:opacity-40"
       >
-        {tag.strength === "hard" ? "改为优先" : "改为必须"}
+        保存
       </button>
       <button
         type="button"
         disabled={disabled}
         aria-label={`去掉${tag.label}`}
         onClick={() => onAction({ action: "edit-constraint", field: tag.field, clear: true, revision })}
-        className="min-h-7 rounded-full px-2 text-[0.72rem] font-bold text-slate-500"
+        className="min-h-11 rounded-full border border-slate-200 px-3 text-[0.78rem] font-bold text-slate-700"
       >
         去掉
       </button>
-    </span>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => onAction({ action: "edit-constraint", field: tag.field, strength: nextStrength, revision })}
+        className="min-h-11 rounded-full px-2 text-[0.72rem] font-semibold text-slate-500"
+      >
+        {tag.strength === "hard" ? "改为优先" : "改为必须"}
+      </button>
+    </div>
   );
 }
 

@@ -113,6 +113,55 @@ const shared = await read('/api/sessions');
 assert.equal(shared.body.sessions.some(item => item.name === '小陈'), true);
 assert.equal(shared.body.favorites.some(item => item.title === '原木餐桌'), true);
 
+const editSession = await read('/api/sessions', {method: 'POST'});
+const editId = editSession.body.session_id;
+const namedEdit = await read('/api/session/name', {
+  method: 'POST',
+  headers: {'Content-Type': 'application/json'},
+  body: JSON.stringify({session_id: editId, name: '周先生'})
+});
+assert.equal(namedEdit.body.customer_name, '周先生');
+const sofa = await read('/api/turn', {
+  method: 'POST',
+  headers: {'Content-Type': 'application/json'},
+  body: JSON.stringify({session_id: editId, text: '只看沙发，预算3000元，不要皮质', revision: 0})
+});
+assert.equal(sofa.body.state.constraints.budget_max_cny, 3000);
+assert.equal(sofa.body.state.constraints.exclude_material, '皮质');
+assert.equal(sofa.body.state.candidate_ids.includes('S04'), false);
+assert.equal(sofa.body.title, '周先生');
+const raised = await read('/api/constraint', {
+  method: 'POST',
+  headers: {'Content-Type': 'application/json'},
+  body: JSON.stringify({session_id: editId, field: 'budget_max_cny', value: 5000, revision: sofa.body.state.revision})
+});
+assert.equal(raised.status, 200);
+assert.equal(raised.body.state.constraints.budget_max_cny, 5000);
+assert.equal(raised.body.state.constraints.exclude_material, '皮质');
+assert.equal(raised.body.state.candidate_ids.includes('S04'), true);
+assert.equal(raised.body.state.candidate_ids.includes('S03'), false);
+assert.equal(raised.body.customer_name, '周先生');
+assert.equal(raised.body.title, '周先生');
+const dropped = await read('/api/constraint', {
+  method: 'POST',
+  headers: {'Content-Type': 'application/json'},
+  body: JSON.stringify({session_id: editId, field: 'exclude_material', clear: true, revision: raised.body.state.revision})
+});
+assert.equal(dropped.body.state.constraints.exclude_material, null);
+assert.equal(dropped.body.state.constraints.budget_max_cny, 5000);
+assert.equal(dropped.body.state.candidate_ids.includes('S03'), true);
+assert.equal(dropped.body.customer_name, '周先生');
+const narrowed = await read('/api/turn', {
+  method: 'POST',
+  headers: {'Content-Type': 'application/json'},
+  body: JSON.stringify({session_id: editId, text: '宽度改成160', revision: dropped.body.state.revision})
+});
+assert.equal(narrowed.body.state.constraints.width_max_cm, 160);
+assert.equal(narrowed.body.state.constraints.budget_max_cny, 5000);
+assert.equal(narrowed.body.state.candidate_ids.includes('S02'), true);
+assert.equal(narrowed.body.state.candidate_ids.includes('S01'), false);
+assert.equal(narrowed.body.customer_name, '周先生');
+
 server.close();
 const restarted = await start(0);
 const again = await fetch('http://127.0.0.1:' + restarted.address().port + '/api/sessions').then(response => response.json());
