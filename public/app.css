@@ -289,8 +289,7 @@ button, input { font: inherit; color: inherit; }
   margin: 0 0 10px;
 }
 .fact-name { flex: 0 0 auto; font-size: 14px; font-weight: 650; }
-.fact-unit, .fact-relax { flex: 0 0 auto; font-size: 13px; color: var(--muted); }
-.fact-relax { font-size: 12px; }
+.fact-relax { flex: 0 0 auto; font-size: 12px; color: var(--muted); }
 .fact-row input {
   width: 4.75rem;
   min-width: 0;

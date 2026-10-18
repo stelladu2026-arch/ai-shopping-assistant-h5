@@ -18,6 +18,8 @@ assert.match(tagsUi, /不要/);
 assert.match(tagsUi, /保存/);
 assert.match(tagsUi, /去掉/);
 assert.match(tagsUi, /可放宽/);
+assert.equal(tagsUi.includes(">元<"), false);
+assert.equal(tagsUi.includes("厘米"), false);
 const confirmLead = probeLead({ needsConfirm: true, options: [{ label: "颜色 浅色" }, { label: "风格 自然" }] });
 assert.equal(confirmLead.includes("必须满足"), false);
 assert.equal(confirmLead.includes("优先满足"), false);

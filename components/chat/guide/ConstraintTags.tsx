@@ -35,15 +35,15 @@ interface ConstraintTagsProps {
   onAction: (body: Record<string, unknown>) => void;
 }
 
-function rowCopy(field: string) {
-  if (field === "budget_max_cny") return { name: "预算", unit: "元" };
-  if (field === "width_max_cm") return { name: "宽度", unit: "厘米" };
-  if (field === "category") return { name: "品类", unit: "" };
-  if (field === "color") return { name: "颜色", unit: "" };
-  if (field === "exclude_material") return { name: "不要", unit: "" };
-  if (field === "material") return { name: "材质", unit: "" };
-  if (field === "style") return { name: "风格", unit: "" };
-  return { name: "条件", unit: "" };
+function fieldName(field: string) {
+  if (field === "budget_max_cny") return "预算";
+  if (field === "width_max_cm") return "尺寸";
+  if (field === "category") return "品类";
+  if (field === "color") return "颜色";
+  if (field === "exclude_material") return "不要";
+  if (field === "material") return "材质";
+  if (field === "style") return "风格";
+  return "条件";
 }
 
 function TagEditor({
@@ -58,26 +58,26 @@ function TagEditor({
   onAction: (body: Record<string, unknown>) => void;
 }) {
   const numeric = tag.field === "budget_max_cny" || tag.field === "width_max_cm";
-  const { name, unit } = rowCopy(tag.field);
+  const name = fieldName(tag.field);
+  const inputId = `constraint-${tag.field}`;
   const [draft, setDraft] = useState(String(tag.value));
   useEffect(() => {
     setDraft(String(tag.value));
   }, [tag.field, tag.value]);
   const dirty = draft.trim() !== "" && draft.trim() !== String(tag.value);
-  const phrase = `${name} ${draft.trim()}${unit}`;
 
   return (
     <div data-constraint-field={tag.field} className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2 py-2">
-      <span className="shrink-0 text-[0.82rem] font-semibold text-slate-900">{name}</span>
+      <label htmlFor={inputId} className="shrink-0 text-[0.82rem] font-semibold text-slate-900">{name}</label>
       <Input
+        id={inputId}
         value={draft}
         disabled={disabled}
         inputMode={numeric ? "numeric" : "text"}
-        aria-label={`修改${phrase}`}
+        aria-label={name}
         onChange={(event) => setDraft(event.target.value)}
         className="h-11 min-w-0 flex-1 px-2 text-[0.9rem]"
       />
-      {unit ? <span className="shrink-0 text-[0.78rem] text-slate-500">{unit}</span> : null}
       {tag.strength === "prefer" ? <span className="shrink-0 text-[0.68rem] font-medium text-slate-400">可放宽</span> : null}
       <Button
         type="button"
@@ -93,7 +93,7 @@ function TagEditor({
         variant="outline"
         size="sm"
         disabled={disabled}
-        aria-label={`去掉${phrase}`}
+        aria-label={`去掉${name}`}
         onClick={() => onAction({ action: "edit-constraint", field: tag.field, clear: true, revision })}
         className="h-11 shrink-0 px-3"
       >

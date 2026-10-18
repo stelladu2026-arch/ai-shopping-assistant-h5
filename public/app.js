@@ -50,14 +50,14 @@ function recognizedConstraints(state) {
   const items = state?.constraints || {};
   const roles = state?.constraint_roles || {};
   const rows = [];
-  const add = (field, name, value, unit, numeric) => {
-    rows.push({field, name, value: String(value), unit, numeric, relaxable: roles[field] === 'prefer'});
+  const add = (field, name, value, numeric) => {
+    rows.push({field, name, value: String(value), numeric, relaxable: roles[field] === 'prefer'});
   };
-  if (items.budget_max_cny != null) add('budget_max_cny', '预算', items.budget_max_cny, '元', true);
-  if (items.width_max_cm != null) add('width_max_cm', '宽度', items.width_max_cm, '厘米', true);
-  if (items.category) add('category', '品类', items.category, '', false);
-  if (items.color) add('color', '颜色', items.color, '', false);
-  if (items.exclude_material) add('exclude_material', '不要', items.exclude_material, '', false);
+  if (items.budget_max_cny != null) add('budget_max_cny', '预算', items.budget_max_cny, true);
+  if (items.width_max_cm != null) add('width_max_cm', '尺寸', items.width_max_cm, true);
+  if (items.category) add('category', '品类', items.category, false);
+  if (items.color) add('color', '颜色', items.color, false);
+  if (items.exclude_material) add('exclude_material', '不要', items.exclude_material, false);
   return rows;
 }
 
@@ -303,13 +303,14 @@ function renderChat() {
     const line = document.createElement('div');
     line.className = 'fact-row';
     line.dataset.constraint = row.field;
-    const name = document.createElement('span');
+    const name = document.createElement('label');
     name.className = 'fact-name';
+    name.htmlFor = 'constraint-' + row.field;
     name.textContent = row.name;
     const input = document.createElement('input');
+    input.id = 'constraint-' + row.field;
     input.value = row.value;
-    const phrase = () => row.name + ' ' + input.value.trim() + row.unit;
-    input.setAttribute('aria-label', '修改' + phrase());
+    input.setAttribute('aria-label', row.name);
     input.inputMode = row.numeric ? 'decimal' : 'text';
     const save = document.createElement('button');
     save.type = 'button';
@@ -318,22 +319,15 @@ function renderChat() {
     save.disabled = true;
     input.addEventListener('input', () => {
       save.disabled = input.value.trim() === '' || input.value.trim() === row.value;
-      input.setAttribute('aria-label', '修改' + phrase());
     });
     save.addEventListener('click', () => editRecognized(row.field, input.value.trim(), false));
     const remove = document.createElement('button');
     remove.type = 'button';
     remove.className = 'chip-btn tap remove';
-    remove.setAttribute('aria-label', '去掉' + phrase());
+    remove.setAttribute('aria-label', '去掉' + row.name);
     remove.textContent = '去掉';
     remove.addEventListener('click', () => editRecognized(row.field, '', true));
     line.append(name, input);
-    if (row.unit) {
-      const unit = document.createElement('span');
-      unit.className = 'fact-unit';
-      unit.textContent = row.unit;
-      line.append(unit);
-    }
     if (row.relaxable) {
       const quiet = document.createElement('span');
       quiet.className = 'fact-relax';

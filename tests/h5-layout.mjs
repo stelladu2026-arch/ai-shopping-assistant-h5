@@ -34,6 +34,8 @@ assert.equal(app.includes('排除材质'), false);
 assert.match(app, /不要/);
 assert.match(app, /可放宽/);
 assert.match(app, /去掉/);
+assert.equal(app.includes("fact-unit"), false);
+assert.equal(app.includes("row.unit"), false);
 assert.match(app, /\/api\/constraint/);
 assert.match(server, /\/api\/constraint/);
 assert.equal(app.includes('小陈'), false);
