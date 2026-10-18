@@ -38,22 +38,26 @@ function show(next, options = {}) {
 function constraintLines(state) {
   const items = state?.constraints || {};
   return [
-    ['预算', items.budget_max_cny == null ? '未填' : items.budget_max_cny + ' 元'],
-    ['宽度', items.width_max_cm == null ? '不限' : items.width_max_cm + ' 厘米'],
+    ['预算', items.budget_max_cny == null ? '未填' : items.budget_max_cny + '元'],
+    ['宽度', items.width_max_cm == null ? '不限' : items.width_max_cm + '厘米'],
     ['品类', items.category || '不限'],
     ['颜色', items.color || '不限'],
-    ['排除材质', items.exclude_material || '无']
+    ['不要', items.exclude_material || '无']
   ];
 }
 
 function recognizedConstraints(state) {
   const items = state?.constraints || {};
+  const roles = state?.constraint_roles || {};
   const rows = [];
-  if (items.budget_max_cny != null) rows.push({field: 'budget_max_cny', label: '预算', value: String(items.budget_max_cny), numeric: true});
-  if (items.width_max_cm != null) rows.push({field: 'width_max_cm', label: '宽度', value: String(items.width_max_cm), numeric: true});
-  if (items.category) rows.push({field: 'category', label: '品类', value: String(items.category), numeric: false});
-  if (items.color) rows.push({field: 'color', label: '颜色', value: String(items.color), numeric: false});
-  if (items.exclude_material) rows.push({field: 'exclude_material', label: '排除材质', value: String(items.exclude_material), numeric: false});
+  const add = (field, name, value, unit, numeric) => {
+    rows.push({field, name, value: String(value), unit, numeric, relaxable: roles[field] === 'prefer'});
+  };
+  if (items.budget_max_cny != null) add('budget_max_cny', '预算', items.budget_max_cny, '元', true);
+  if (items.width_max_cm != null) add('width_max_cm', '宽度', items.width_max_cm, '厘米', true);
+  if (items.category) add('category', '品类', items.category, '', false);
+  if (items.color) add('color', '颜色', items.color, '', false);
+  if (items.exclude_material) add('exclude_material', '不要', items.exclude_material, '', false);
   return rows;
 }
 
@@ -298,12 +302,14 @@ function renderChat() {
   for (const row of recognized) {
     const line = document.createElement('div');
     line.className = 'fact-row';
+    line.dataset.constraint = row.field;
     const name = document.createElement('span');
     name.className = 'fact-name';
-    name.textContent = row.label;
+    name.textContent = row.name;
     const input = document.createElement('input');
     input.value = row.value;
-    input.setAttribute('aria-label', '修改' + row.label);
+    const phrase = () => row.name + ' ' + input.value.trim() + row.unit;
+    input.setAttribute('aria-label', '修改' + phrase());
     input.inputMode = row.numeric ? 'decimal' : 'text';
     const save = document.createElement('button');
     save.type = 'button';
@@ -311,16 +317,30 @@ function renderChat() {
     save.textContent = '保存';
     save.disabled = true;
     input.addEventListener('input', () => {
-      save.disabled = input.value.trim() === row.value;
+      save.disabled = input.value.trim() === '' || input.value.trim() === row.value;
+      input.setAttribute('aria-label', '修改' + phrase());
     });
     save.addEventListener('click', () => editRecognized(row.field, input.value.trim(), false));
     const remove = document.createElement('button');
     remove.type = 'button';
     remove.className = 'chip-btn tap remove';
-    remove.setAttribute('aria-label', '去掉' + row.label);
+    remove.setAttribute('aria-label', '去掉' + phrase());
     remove.textContent = '去掉';
     remove.addEventListener('click', () => editRecognized(row.field, '', true));
-    line.append(name, input, save, remove);
+    line.append(name, input);
+    if (row.unit) {
+      const unit = document.createElement('span');
+      unit.className = 'fact-unit';
+      unit.textContent = row.unit;
+      line.append(unit);
+    }
+    if (row.relaxable) {
+      const quiet = document.createElement('span');
+      quiet.className = 'fact-relax';
+      quiet.textContent = '可放宽';
+      line.append(quiet);
+    }
+    line.append(save, remove);
     facts.append(line);
   }
   const thread = $('#thread');

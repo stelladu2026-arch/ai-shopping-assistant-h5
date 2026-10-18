@@ -362,9 +362,17 @@ async function handleApi(request, response, url) {
     }
     const result = editConstraint(session.record.state, body, body.revision);
     if (result.ok) {
-      const labels = {budget_max_cny: '预算', width_max_cm: '宽度', category: '品类', color: '颜色', exclude_material: '排除材质'};
-      const label = labels[body.field] || '条件';
-      const note = body.clear ? '去掉' + label : label + '改成' + result.state.constraints[body.field];
+      const beforeValue = session.record.state.constraints?.[body.field];
+      const phrase = (field, value) => {
+        const text = value == null ? '' : String(value);
+        if (field === 'budget_max_cny') return `预算 ${text}元`;
+        if (field === 'width_max_cm') return `宽度 ${text}厘米`;
+        if (field === 'category') return `品类 ${text}`;
+        if (field === 'color') return `颜色 ${text}`;
+        if (field === 'exclude_material') return `不要 ${text}`;
+        return text || '条件';
+      };
+      const note = body.clear ? '去掉' + phrase(body.field, beforeValue) : phrase(body.field, result.state.constraints[body.field]);
       remember(session.record, {role: 'user', text: note});
       if (result.reply) remember(session.record, {role: 'assistant', text: result.reply, status: result.status});
       session.record.state = result.state;

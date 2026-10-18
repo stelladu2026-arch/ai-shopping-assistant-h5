@@ -142,6 +142,7 @@ assert.equal(raised.body.state.candidate_ids.includes('S04'), true);
 assert.equal(raised.body.state.candidate_ids.includes('S03'), false);
 assert.equal(raised.body.customer_name, '周先生');
 assert.equal(raised.body.title, '周先生');
+assert.equal(raised.body.messages.some(item => item.text === '预算 5000元'), true);
 const dropped = await read('/api/constraint', {
   method: 'POST',
   headers: {'Content-Type': 'application/json'},
@@ -151,6 +152,12 @@ assert.equal(dropped.body.state.constraints.exclude_material, null);
 assert.equal(dropped.body.state.constraints.budget_max_cny, 5000);
 assert.equal(dropped.body.state.candidate_ids.includes('S03'), true);
 assert.equal(dropped.body.customer_name, '周先生');
+assert.equal(dropped.body.messages.some(item => item.text === '去掉不要 皮质'), true);
+const spoken = JSON.stringify(dropped.body.messages);
+assert.equal(spoken.includes('必须满足'), false);
+assert.equal(spoken.includes('优先满足'), false);
+assert.equal(spoken.includes('去除条件'), false);
+assert.equal(spoken.includes('排除材质'), false);
 const narrowed = await read('/api/turn', {
   method: 'POST',
   headers: {'Content-Type': 'application/json'},

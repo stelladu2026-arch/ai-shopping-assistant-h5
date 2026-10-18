@@ -115,11 +115,11 @@ function matches(item, constraints, roles) {
 }
 
 function tagText(field, value) {
-  if (field === "budget_max_cny") return `预算 ${value} 元`;
-  if (field === "width_max_cm") return `宽度 ${value} 厘米`;
+  if (field === "budget_max_cny") return `预算 ${value}元`;
+  if (field === "width_max_cm") return `宽度 ${value}厘米`;
   if (field === "category") return `品类 ${value}`;
   if (field === "color") return `颜色 ${value}`;
-  if (field === "exclude_material") return `排除 ${value}`;
+  if (field === "exclude_material") return `不要 ${value}`;
   if (field === "material") return `材质 ${value}`;
   if (field === "style") return `风格 ${value}`;
   return String(value);
@@ -136,8 +136,8 @@ function relaxableFields(constraints, roles) {
   return PROBE_FIELDS.filter((field) => constraints?.[field] && current[field] !== "prefer" && !current[`${field}_locked`]);
 }
 
-// 正式查询为空时，看有没有被误设成硬约束的偏好。只有一个偏好放宽后能查到商品，就直接改成优先考虑并查出结果。
-// 两个偏好分别放宽都能查到商品，才停下来让导购确认。预算、宽度、品类、排除材质，以及说了“必须”的条件，不自动放宽。
+// 正式查询为空时，看有没有可以放宽的颜色或风格。只有一项放宽后能查到商品，就标成可放宽并查出结果。
+// 两项分别放宽都能查到商品，才停下来让导购点一项。预算、宽度、品类、不要的材质，以及说了“必须”的条件，不自动放宽。
 export function resolveConstraintSearch(constraints, roles) {
   const current = mergedRoles(roles);
   const officialIds = searchProducts(constraints, current);
@@ -179,14 +179,14 @@ export function probeLead(probe) {
   if (!probe) return "";
   if (probe.needsConfirm) {
     const choices = (probe.options || []).map((item) => item.label).join("、");
-    return `需要确认。${choices} 分别放宽都会查到商品，请选择放宽哪一项。预算、宽度、品类和排除材质保持必须满足。`;
+    return `需要确认。${choices} 分别放宽都会查到商品，请点一项继续。预算、宽度、品类和不要的材质先不动。`;
   }
-  return `无结果。试探只放宽了一个偏好「${probe.label}」，仍然没有符合的商品。没有放宽预算、宽度、品类和排除材质。我不会自行放宽。`;
+  return `无结果。只放宽了「${probe.label}」，仍然没有符合的商品。预算、宽度、品类和不要的材质没有改。我不会自行放宽。`;
 }
 
 export function appliedLead(applied) {
   if (!applied?.label) return "";
-  return `已把「${applied.label}」改成优先考虑，并按这个直接筛选。请点选要确认的商品。`;
+  return `已把「${applied.label}」标成可放宽，并按这个直接筛选。请点选要确认的商品。`;
 }
 
 export function constraintTags(state) {

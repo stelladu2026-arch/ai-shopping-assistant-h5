@@ -26,7 +26,7 @@ export function reflect(state, confirmedFacts) {
     }
     const colorHard = state?.constraint_roles?.color !== "prefer";
     if (constraints.color && !colorHard) {
-      checks.push({target: id, name: '颜色', ok: true, detail: `优先考虑${constraints.color}，这件是${product.color}，不作为必须满足`});
+      checks.push({target: id, name: '颜色', ok: true, detail: `可放宽，希望${constraints.color}，这件是${product.color}`});
     } else if (constraints.color === '浅色') {
       checks.push({target: id, name: '颜色', ok: LIGHT.includes(product.color), detail: product.color});
     } else if (constraints.color) {
@@ -41,7 +41,7 @@ export function reflect(state, confirmedFacts) {
         target: id,
         name: '材质',
         ok: materialHard ? product.material === constraints.material : true,
-        detail: materialHard ? product.material : `优先考虑${constraints.material}，这件是${product.material}，不作为必须满足`,
+        detail: materialHard ? product.material : `可放宽，希望${constraints.material}，这件是${product.material}`,
       });
     }
   }

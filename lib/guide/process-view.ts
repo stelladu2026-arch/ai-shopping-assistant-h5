@@ -33,10 +33,10 @@ export function describeProcess({ edge, note, state, facts, material, decision, 
     if (productStatus === "failed") did = "筛选没有完成，自己停住。已确认商品和已有素材都还在。";
     else if (edge === "stay") did = "商品已经确认。这一步不再重新筛选，也不另选商品。";
     else if (state?.confirmed_product_id && facts?.name) did = `确认了「${facts.name}」。名称、价格和规格来自资料，不能在表单里手改。`;
-    else if (!(state?.candidate_ids || []).length && state?.probe?.needsConfirm) did = "两项偏好分别放宽都会查到商品，自己停下来等导购确认放宽哪一项。没有改预算、宽度、品类和排除材质。";
-    else if (!(state?.candidate_ids || []).length && state?.probe) did = `自己做了约束敏感度分析，只放宽一个偏好「${state.probe.label}」做了一次试探查询，仍然没有结果。没有放宽必须满足的条件。`;
+    else if (!(state?.candidate_ids || []).length && state?.probe?.needsConfirm) did = "两项都可以放宽，并且分别放宽都会查到商品。自己停下来等导购点一项。预算、宽度、品类和不要的材质没有改。";
+    else if (!(state?.candidate_ids || []).length && state?.probe) did = `自己做了一次试探，只放宽「${state.probe.label}」，仍然没有结果。预算、宽度、品类和不要的材质没有改。`;
     else if (!(state?.candidate_ids || []).length) did = "没有同时满足条件的商品，自己停住，不放宽条件。";
-    else if (state?.applied_preference?.label) did = `已把「${state.applied_preference.label}」改成优先考虑，并直接筛选。没有改预算、宽度、品类和排除材质。`;
+    else if (state?.applied_preference?.label) did = `已把「${state.applied_preference.label}」标成可放宽，并直接筛选。预算、宽度、品类和不要的材质没有改。`;
     else did = `按预算、尺寸、品类、颜色和材质自己筛选，等导购点选确认。没有自行放宽条件。${RANK_RULE}`;
   }
 
