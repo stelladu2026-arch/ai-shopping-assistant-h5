@@ -1,7 +1,3 @@
-const customers = [
-  {id: 'guest-a', name: '小陈'},
-  {id: 'guest-b', name: '林女士'}
-];
 const prompts = [
   '浅色沙发，预算3000元，宽度不超过180厘米，不要皮质',
   '预算3000元，想买适合小户型的沙发',
@@ -10,22 +6,22 @@ const prompts = [
 ];
 
 let screen = 'home';
-let customerId = 'guest-a';
+let sessionId = null;
 let scene = 'search';
 let backTo = 'home';
 let catalog = [];
 let model = {mode: 'simulation'};
 let sessionList = [];
+let favoriteList = [];
+let hubTab = 'recent';
 let active = null;
 let guideTone = null;
-let memoryBook = {guide: [], customers: {'guest-a': [], 'guest-b': []}};
+let memoryBook = {guide: [], sessions: {}};
 let pendingLabel = '';
+let busy = false;
+let renameTarget = null;
 
 const $ = selector => document.querySelector(selector);
-
-function nameOf(id) {
-  return customers.find(item => item.id === id)?.name || '顾客';
-}
 
 function show(next, options = {}) {
   screen = next;
@@ -60,11 +56,6 @@ function suggestions(state) {
   return [];
 }
 
-function preferredCustomer() {
-  const latest = [...sessionList].filter(item => item.revision > 0).sort((a, b) => b.updatedAt - a.updatedAt)[0];
-  return latest?.id || customerId;
-}
-
 function renderHome() {
   const latest = [...sessionList].filter(item => item.revision > 0).sort((a, b) => b.updatedAt - a.updatedAt)[0];
   const card = $('#continue-card');
@@ -83,7 +74,13 @@ function renderHome() {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'session tap';
-    button.innerHTML = `<span><strong>${latest.name}</strong><small>${latest.preview}</small></span>`;
+    const title = document.createElement('strong');
+    title.textContent = latest.name;
+    const preview = document.createElement('small');
+    preview.textContent = latest.preview;
+    const span = document.createElement('span');
+    span.append(title, preview);
+    button.append(span);
     button.addEventListener('click', () => openChat(latest.id, 'home'));
     card.append(button);
   }
@@ -94,28 +91,92 @@ function renderHome() {
     button.type = 'button';
     button.className = 'prompt tap';
     button.textContent = text;
-    button.addEventListener('click', () => ask(preferredCustomer(), text, 'search'));
+    button.addEventListener('click', () => ask(text));
     box.append(button);
   }
 }
 
-function renderSessions() {
+function renderFavorites() {
   const list = $('#session-list');
   list.replaceChildren();
+  if (!favoriteList.length) {
+    const empty = document.createElement('p');
+    empty.className = 'pad muted';
+    empty.textContent = '还没有收藏。确认商品或生成话术后可以收藏。';
+    list.append(empty);
+    return;
+  }
+  for (const item of favoriteList) {
+    const row = document.createElement('div');
+    row.className = 'session';
+    const span = document.createElement('span');
+    const title = document.createElement('strong');
+    title.textContent = item.title;
+    const preview = document.createElement('small');
+    preview.textContent = item.content;
+    span.append(title, preview);
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'text-btn tap';
+    remove.textContent = '取消收藏';
+    remove.addEventListener('click', () => toggleFavorite(item.source_id, item.kind, item.title, item.content));
+    row.append(span, remove);
+    list.append(row);
+  }
+}
+
+function renderSessions() {
+  $('#tab-recent').classList.toggle('is-on', hubTab === 'recent');
+  $('#tab-favorites').classList.toggle('is-on', hubTab === 'favorites');
+  $('#tab-recent').setAttribute('aria-pressed', String(hubTab === 'recent'));
+  $('#tab-favorites').setAttribute('aria-pressed', String(hubTab === 'favorites'));
+  if (hubTab === 'favorites') {
+    renderFavorites();
+    return;
+  }
+  const list = $('#session-list');
+  list.replaceChildren();
+  if (!sessionList.length) {
+    const empty = document.createElement('p');
+    empty.className = 'pad muted';
+    empty.textContent = '还没有会话。';
+    list.append(empty);
+    return;
+  }
   for (const item of sessionList) {
     const row = document.createElement('div');
     row.className = 'session';
     const open = document.createElement('button');
     open.type = 'button';
     open.className = 'prompt tap';
-    open.innerHTML = `<span><strong>${item.name}</strong><small>${item.preview}</small>${item.confirmed_name ? `<span class="tag">已确认 ${item.confirmed_name}</span>` : ''}</span>`;
+    const title = document.createElement('strong');
+    title.textContent = item.name;
+    const preview = document.createElement('small');
+    preview.textContent = item.preview;
+    const span = document.createElement('span');
+    span.append(title, preview);
+    if (item.confirmed_name) {
+      const tag = document.createElement('span');
+      tag.className = 'tag';
+      tag.textContent = '已确认 ' + item.confirmed_name;
+      span.append(tag);
+    }
+    open.append(span);
     open.addEventListener('click', () => openChat(item.id, 'sessions'));
+    const rename = document.createElement('button');
+    rename.type = 'button';
+    rename.className = 'text-btn tap';
+    rename.textContent = '改名';
+    rename.addEventListener('click', () => openRename(item.id, item.customer_name || ''));
     const clear = document.createElement('button');
     clear.type = 'button';
     clear.className = 'text-btn tap';
     clear.textContent = '清空';
-    clear.addEventListener('click', () => resetCustomer(item.id));
-    row.append(open, clear);
+    clear.addEventListener('click', () => resetSession(item.id));
+    const actions = document.createElement('div');
+    actions.className = 'row session-actions';
+    actions.append(rename, clear);
+    row.append(open, actions);
     list.append(row);
   }
 }
@@ -124,19 +185,26 @@ function renderSettings() {
   const mode = model.mode === 'live' ? '真实生文已启用，话术仍需人工核对。' : '演示回放。商品筛选和活动校验在本地完成，没有调用真实生文或生图。';
   $('#mode-card').textContent = mode + ' 生文密钥写在 .env 的 DASHSCOPE_API_KEY；生图用 IMAGE_API_BASE、IMAGE_MODEL、IMAGE_API_KEY。页面不填写密钥。';
   $('#tone-line').textContent = guideTone
-    ? `已记住导购语气：${guideTone}。它不会变成顾客的预算或商品条件，也不会当成已验证事实。`
-    : '还没有记住语气。这是导购自己的偏好，不会写进顾客的选品条件。';
+    ? `已记住导购语气：${guideTone}。它不会变成这次选品的预算或商品条件，也不会当成已验证事实。`
+    : '还没有记住语气。这是导购自己的偏好，不会写进这次选品条件。';
   const box = $('#memory-card');
   box.replaceChildren();
-  const groups = [
-    ['导购', memoryBook.guide || [], null],
-    ['小陈', memoryBook.customers?.['guest-a'] || [], 'guest-a'],
-    ['林女士', memoryBook.customers?.['guest-b'] || [], 'guest-b']
-  ];
-  for (const [label, items, owner] of groups) {
+  const groups = [];
+  if ((memoryBook.guide || []).length) groups.push(['导购', memoryBook.guide]);
+  for (const item of sessionList) {
+    const memories = memoryBook.sessions?.[item.id] || [];
+    if (memories.length) groups.push([item.name, memories]);
+  }
+  if (!groups.length) {
     const heading = document.createElement('p');
     heading.className = 'muted';
-    heading.textContent = items.length ? label : label + '：还没有记住的内容';
+    heading.textContent = '还没有记住的内容。';
+    box.append(heading);
+  }
+  for (const [label, items] of groups) {
+    const heading = document.createElement('p');
+    heading.className = 'muted';
+    heading.textContent = label;
     box.append(heading);
     for (const item of items) {
       const row = document.createElement('div');
@@ -147,11 +215,15 @@ function renderSettings() {
       button.type = 'button';
       button.className = 'text-btn tap';
       button.textContent = '删除';
-      button.addEventListener('click', () => forgetMemory(item.id, owner || customerId));
+      button.addEventListener('click', () => forgetMemory(item.id));
       row.append(text, button);
       box.append(row);
     }
   }
+  const note = document.createElement('p');
+  note.className = 'muted';
+  note.textContent = '清空会话不会删除已记住的内容；删除只作用于点到的那一条。';
+  box.append(note);
 }
 
 function reasonFor(product, state) {
@@ -160,8 +232,20 @@ function reasonFor(product, state) {
   return parts.join('，') + '。理由只来自商品资料。';
 }
 
+function favoriteButton(sourceId, kind, title, content) {
+  const saved = favoriteList.some(item => item.source_id === sourceId);
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'chip-btn tap';
+  button.textContent = saved ? '已收藏' : '收藏';
+  button.addEventListener('click', () => toggleFavorite(sourceId, kind, title, content));
+  return button;
+}
+
 function renderChat() {
-  $('#chat-title').textContent = `${nameOf(customerId)} · ${scene === 'copy' ? '推荐话术' : '选品推荐'}`;
+  const customerName = active?.customer_name || '';
+  $('#chat-title').textContent = customerName || (scene === 'copy' ? '推荐话术' : '选品推荐');
+  $('#rename-current').textContent = customerName ? '客户：' + customerName : '改成客户名';
   for (const button of document.querySelectorAll('[data-scene]')) {
     button.classList.toggle('is-on', button.dataset.scene === scene);
   }
@@ -197,7 +281,7 @@ function renderChat() {
     empty.className = 'bubble assistant';
     empty.textContent = scene === 'copy'
       ? '先点选确认商品，再生成话术。聊天里说“你替我确认”不会代替点选。'
-      : `正在为${nameOf(customerId)}选品。说说预算、宽度、颜色或材质。`;
+      : '说说预算、宽度、颜色或材质。';
     thread.append(empty);
   }
   for (const message of messages) {
@@ -212,7 +296,11 @@ function renderChat() {
       if (!product) continue;
       const card = document.createElement('article');
       card.className = 'product';
-      card.innerHTML = '<div class="placeholder">模拟商品</div>';
+      const photo = document.createElement('img');
+      photo.className = 'shot';
+      photo.alt = product.name + '示意图';
+      photo.src = '/products/' + product.id + '.png';
+      card.append(photo);
       const title = document.createElement('h2');
       title.textContent = product.name;
       const meta = document.createElement('p');
@@ -236,7 +324,8 @@ function renderChat() {
         button.className = 'confirm tap';
         button.textContent = '确认这件商品';
         button.addEventListener('click', () => confirmProduct(product.id));
-        card.append(title, meta, price, reason, button);
+        const save = favoriteButton('product:' + product.id, 'product', product.name, reason.textContent);
+        card.append(title, meta, price, reason, button, save);
       }
       thread.append(card);
     }
@@ -298,7 +387,8 @@ function renderChat() {
     picture.id = 'make-image';
     picture.textContent = '生成配图';
     picture.addEventListener('click', () => withPending('正在准备配图…', () => post('/api/image', {})));
-    actions.append(copy, again, picture);
+    const saveCopy = favoriteButton('copy:' + sessionId, 'material', '推荐话术', state.card.text);
+    actions.append(copy, again, picture, saveCopy);
     draft.append(actions);
     thread.append(draft);
   }
@@ -308,13 +398,25 @@ function renderChat() {
     shot.id = 'image-card';
     const title = document.createElement('h2');
     title.textContent = active.image.label || '演示回放、待核对';
-    const box = document.createElement('div');
-    box.className = 'placeholder';
-    box.textContent = '演示回放、待核对';
     const note = document.createElement('p');
     note.className = 'muted';
-    note.textContent = '没有调用生图接口。请求体已留好：模型、提示词、尺寸和张数，密钥不出现在页面上。';
-    shot.append(title, box, note);
+    if (active.image.url) {
+      const picture = document.createElement('img');
+      picture.className = 'shot';
+      picture.alt = '待核对的配图';
+      picture.src = active.image.url;
+      shot.append(title, picture);
+      note.textContent = '配图已返回，仍待核对。密钥不会出现在页面上。';
+    } else {
+      const box = document.createElement('div');
+      box.className = 'placeholder';
+      box.textContent = '演示回放、待核对';
+      shot.append(title, box);
+      note.textContent = active.image.called
+        ? '接口没有返回可用图片地址，仍待核对。密钥不会出现在页面上。'
+        : '没有调用生图接口。请求体已留好：模型、提示词、尺寸和张数，密钥不出现在页面上。';
+    }
+    shot.append(note);
     thread.append(shot);
   }
   const lines = constraintLines(state).filter(([, value]) => value !== '未填' && value !== '不限' && value !== '无');
@@ -327,7 +429,7 @@ function renderChat() {
       button.className = 'chip-btn tap';
       button.id = 'remember-constraints';
       button.textContent = '记住这次约束';
-      button.addEventListener('click', () => rememberItem('customer', '本次约束', lines.map(([label, value]) => label + value).join('，')));
+      button.addEventListener('click', () => rememberItem('session', '本次约束', lines.map(([label, value]) => label + value).join('，')));
       remember.append(button);
     }
     if (state?.confirmed_product_id) {
@@ -337,7 +439,7 @@ function renderChat() {
       button.id = 'remember-product';
       button.textContent = '记住已确认商品';
       const product = catalog.find(item => item.id === state.confirmed_product_id);
-      button.addEventListener('click', () => rememberItem('customer', '已确认商品', product ? product.name : state.confirmed_product_id));
+      button.addEventListener('click', () => rememberItem('session', '已确认商品', product ? product.name : state.confirmed_product_id));
       remember.append(button);
     }
     thread.append(remember);
@@ -359,13 +461,14 @@ function renderChat() {
     button.addEventListener('click', () => send(text));
     suggest.append(button);
   }
-  $('#message').placeholder = scene === 'copy' ? '例如：简洁一些，或缩短到 80 字' : '说说这位顾客的预算、尺寸或颜色';
+  $('#message').placeholder = scene === 'copy' ? '例如：简洁一些，或缩短到 80 字' : '说说预算、尺寸或颜色';
   thread.lastElementChild?.scrollIntoView({block: 'end'});
 }
 
 async function refreshSessions() {
   const payload = await fetch('/api/sessions').then(response => response.json());
   sessionList = payload.sessions;
+  favoriteList = payload.favorites || [];
   guideTone = payload.guide_tone;
   memoryBook = payload.memory || memoryBook;
   renderHome();
@@ -374,22 +477,38 @@ async function refreshSessions() {
 }
 
 async function loadActive() {
-  active = await fetch('/api/session?customer_id=' + customerId).then(response => response.json());
+  if (!sessionId) return;
+  const response = await fetch('/api/session?session_id=' + encodeURIComponent(sessionId));
+  if (!response.ok) return;
+  active = await response.json();
   guideTone = active.guide_tone;
   renderChat();
 }
 
 async function openChat(id, from) {
-  customerId = id;
+  sessionId = id;
   show('chat', {back: from || 'home'});
   await loadActive();
 }
 
-async function ask(id, text, nextScene) {
-  scene = nextScene;
-  customerId = id;
-  show('chat', {back: 'home'});
-  await loadActive();
+async function openNew(from, nextScene) {
+  if (nextScene) scene = nextScene;
+  const reusable = sessionList.find(item => item.name === '新会话' && item.revision === 0);
+  if (reusable) {
+    await openChat(reusable.id, from);
+    return;
+  }
+  const payload = await fetch('/api/sessions', {method: 'POST'}).then(response => response.json());
+  sessionId = payload.session_id;
+  active = payload;
+  show('chat', {back: from || 'home'});
+  await refreshSessions();
+  renderChat();
+}
+
+async function ask(text) {
+  scene = 'search';
+  await openNew('home', 'search');
   await send(text);
 }
 
@@ -397,7 +516,7 @@ async function post(pathname, body) {
   const response = await fetch(pathname, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({...body, customer_id: customerId, revision: active?.state?.revision || 0})
+    body: JSON.stringify({...body, session_id: sessionId, revision: active?.state?.revision || 0})
   });
   const payload = await response.json();
   if (!response.ok) {
@@ -426,7 +545,7 @@ async function rememberItem(scope, key, value) {
   const payload = await fetch('/api/memory', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({action: 'remember', scope, key, value, customer_id: customerId})
+    body: JSON.stringify({action: 'remember', scope, key, value, session_id: sessionId})
   }).then(response => response.json());
   guideTone = payload.guide_tone;
   memoryBook = payload.memory || memoryBook;
@@ -435,11 +554,11 @@ async function rememberItem(scope, key, value) {
   renderSettings();
 }
 
-async function forgetMemory(id, owner) {
+async function forgetMemory(id) {
   const payload = await fetch('/api/memory', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({action: 'delete', id, customer_id: owner})
+    body: JSON.stringify({action: 'delete', id, session_id: sessionId})
   }).then(response => response.json());
   guideTone = payload.guide_tone;
   memoryBook = payload.memory || memoryBook;
@@ -449,22 +568,66 @@ async function forgetMemory(id, owner) {
 
 async function send(text) {
   const value = text.trim();
-  if (!value) return;
-  $('#message').value = '';
-  await post('/api/turn', {text: value});
+  if (!value || busy) return;
+  busy = true;
+  const input = $('#message');
+  input.value = '';
+  try {
+    const payload = await post('/api/turn', {text: value});
+    if (!payload && !input.value) input.value = value;
+  } finally {
+    busy = false;
+  }
 }
 
 async function confirmProduct(productId) {
   await post('/api/confirm', {product_id: productId});
 }
 
-async function resetCustomer(id) {
+function openRename(id, current) {
+  renameTarget = id;
+  $('#rename-input').value = current || '';
+  $('#rename-sheet').hidden = false;
+  $('#rename-input').focus();
+}
+
+function closeRename() {
+  renameTarget = null;
+  $('#rename-sheet').hidden = true;
+}
+
+async function renameSession(id, name) {
+  const response = await fetch('/api/session/name', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({session_id: id, name})
+  });
+  if (!response.ok) return;
+  const payload = await response.json();
+  if (sessionId === id) active = payload;
+  await refreshSessions();
+  if (screen === 'chat') renderChat();
+}
+
+async function toggleFavorite(sourceId, kind, title, content) {
+  if (!sessionId && !favoriteList.some(item => item.source_id === sourceId)) return;
+  const owner = favoriteList.find(item => item.source_id === sourceId)?.session_id || sessionId;
+  await fetch('/api/favorites', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({session_id: owner, source_id: sourceId, kind, title, content})
+  });
+  await refreshSessions();
+  if (screen === 'chat') renderChat();
+}
+
+async function resetSession(id) {
   await fetch('/api/reset', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({customer_id: id})
+    body: JSON.stringify({session_id: id})
   });
-  if (customerId === id && screen === 'chat') await loadActive();
+  if (sessionId === id && screen === 'chat') await loadActive();
   await refreshSessions();
 }
 
@@ -473,9 +636,27 @@ $('#chat-settings').addEventListener('click', () => { renderSettings(); show('se
 $('#settings-back').addEventListener('click', () => show(backTo === 'settings' ? 'home' : backTo));
 $('#chat-back').addEventListener('click', () => show(backTo));
 $('#sessions-home').addEventListener('click', () => show('home'));
-$('#open-search').addEventListener('click', () => openChat(preferredCustomer(), 'home').then(() => { scene = 'search'; renderChat(); }));
-$('#open-copy').addEventListener('click', () => openChat(preferredCustomer(), 'home').then(() => { scene = 'copy'; renderChat(); }));
-$('#new-chat').addEventListener('click', () => openChat(preferredCustomer(), 'sessions'));
+$('#rename-current').addEventListener('click', () => {
+  if (sessionId) openRename(sessionId, active?.customer_name || '');
+});
+$('#rename-sheet').addEventListener('submit', async event => {
+  event.preventDefault();
+  const id = renameTarget;
+  const name = $('#rename-input').value;
+  closeRename();
+  if (id) await renameSession(id, name);
+});
+$('#rename-clear').addEventListener('click', async () => {
+  const id = renameTarget;
+  closeRename();
+  if (id) await renameSession(id, '');
+});
+$('#rename-cancel').addEventListener('click', closeRename);
+$('#tab-recent').addEventListener('click', () => { hubTab = 'recent'; renderSessions(); });
+$('#tab-favorites').addEventListener('click', () => { hubTab = 'favorites'; renderSessions(); });
+$('#open-search').addEventListener('click', () => openNew('home', 'search'));
+$('#open-copy').addEventListener('click', () => openNew('home', 'copy'));
+$('#new-chat').addEventListener('click', () => openNew('sessions', 'search'));
 $('#composer').addEventListener('submit', event => {
   event.preventDefault();
   send($('#message').value);

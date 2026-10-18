@@ -25,7 +25,35 @@ async function responseQuota(response) {
 }
 
 function placeholder(request) {
-  return {simulation: true, called: false, pending_human: true, quota: true, label: '演示回放、待核对', request};
+  return {simulation: true, called: false, pending_human: true, quota: true, url: '', label: '演示回放、待核对', request};
+}
+
+function httpUrl(value) {
+  const text = String(value || '').trim();
+  if (!/^https?:\/\//i.test(text)) return '';
+  return text;
+}
+
+function imageUrlFrom(payload) {
+  if (!payload || typeof payload !== 'object') return '';
+  const rows = []
+    .concat(Array.isArray(payload.data) ? payload.data : [])
+    .concat(Array.isArray(payload.output?.results) ? payload.output.results : []);
+  for (const item of rows) {
+    const url = httpUrl(item?.url || item?.image || item?.image_url);
+    if (url) return url;
+  }
+  return httpUrl(payload.url || payload.output?.url);
+}
+
+async function readPayload(response) {
+  if (typeof response?.json === 'function') {
+    try { return await response.json(); } catch { return null; }
+  }
+  if (typeof response?.text === 'function') {
+    try { return JSON.parse(await response.text()); } catch { return null; }
+  }
+  return null;
 }
 
 export function imageStatus(env = process.env) {
@@ -58,7 +86,7 @@ export async function executeImage(product, env = process.env, fetcher = fetch) 
   const status = imageStatus(env);
   const request = imageRequest(product, env);
   if (!status.ready) {
-    return {simulation: true, called: false, pending_human: true, label: '演示回放、待核对', request};
+    return {simulation: true, called: false, pending_human: true, url: '', label: '演示回放、待核对', request};
   }
   try {
     const response = await fetcher(request.url, {
@@ -68,7 +96,11 @@ export async function executeImage(product, env = process.env, fetcher = fetch) 
       body: JSON.stringify(request.body)
     });
     if (!response.ok && await responseQuota(response)) return {...placeholder(request), quota: true};
-    return {simulation: false, called: true, pending_human: true, ok: response.ok, label: '待核对', request};
+    const url = response.ok ? imageUrlFrom(await readPayload(response)) : '';
+    if (response.ok && !url) {
+      return {simulation: true, called: true, pending_human: true, ok: true, url: '', label: '演示回放、待核对', request};
+    }
+    return {simulation: false, called: true, pending_human: true, ok: response.ok, url, label: url ? '待核对' : '待核对', request};
   } catch (error) {
     if (isQuotaFailure(0, null, String(error?.message || error))) return {...placeholder(request), quota: true};
     throw error;

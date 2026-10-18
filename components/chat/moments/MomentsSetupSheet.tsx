@@ -44,7 +44,7 @@ export function MomentsSetupSheet({ open, onClose, children }: MomentsSetupSheet
         aria-label="关闭"
         onClick={onClose}
       />
-      <div className="relative z-10 w-full max-w-[360px] max-h-[min(520px,calc(100dvh-5rem))] overflow-y-auto overscroll-contain tech-scroll">
+      <div className="relative z-10 max-h-[min(520px,calc(100dvh-5rem))] w-full max-w-[430px] animate-in overflow-y-auto overscroll-contain fade-in zoom-in-95 duration-200 tech-scroll">
         <button
           type="button"
           onClick={onClose}

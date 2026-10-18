@@ -4,13 +4,15 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 function sqliteFile() {
+  if (process.env.GUIDE_SQLITE_FILE) return process.env.GUIDE_SQLITE_FILE;
   if (process.env.VERCEL) return path.join("/tmp", "guide.sqlite");
   return path.join(process.cwd(), "data", "guide.sqlite");
 }
 
 function database() {
-  if (!globalThis.__guideSqlite) {
-    const file = sqliteFile();
+  const file = sqliteFile();
+  if (!globalThis.__guideSqlite || globalThis.__guideSqliteFile !== file) {
+    globalThis.__guideSqliteFile = file;
     fs.mkdirSync(path.dirname(file), { recursive: true });
     globalThis.__guideSqlite = new DatabaseSync(file);
     globalThis.__guideSqlite.exec("PRAGMA journal_mode = WAL;");
@@ -70,6 +72,22 @@ function database() {
 
 export function dbFile() {
   return sqliteFile();
+}
+
+export function listSessionRecords() {
+  return database()
+    .prepare("SELECT id, record_json, updated_at FROM sessions ORDER BY updated_at DESC")
+    .all()
+    .map((row) => {
+      let record = null;
+      try {
+        record = JSON.parse(row.record_json);
+      } catch {
+        record = null;
+      }
+      return record ? { id: row.id, record, updatedAt: row.updated_at } : null;
+    })
+    .filter(Boolean);
 }
 
 export function loadSession(id) {
@@ -281,13 +299,22 @@ export function listFavorites() {
   return database()
     .prepare("SELECT * FROM favorites ORDER BY created_at DESC")
     .all()
-    .map((row) => ({
-      id: row.id,
-      sourceMessageId: row.source_message_id,
-      sessionId: row.session_id,
-      type: row.kind,
-      title: row.title,
-      contentPlain: row.content_plain,
-      createdAt: row.created_at,
-    }));
+    .map((row) => {
+      let payload = null;
+      try {
+        payload = row.payload_json ? JSON.parse(row.payload_json) : null;
+      } catch {
+        payload = null;
+      }
+      return {
+        id: row.id,
+        sourceMessageId: row.source_message_id,
+        sessionId: row.session_id,
+        type: row.kind,
+        title: row.title,
+        sessionTitle: payload?.sessionTitle || "",
+        contentPlain: row.content_plain,
+        createdAt: row.created_at,
+      };
+    });
 }

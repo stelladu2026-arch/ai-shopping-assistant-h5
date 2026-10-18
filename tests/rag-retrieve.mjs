@@ -236,6 +236,24 @@ assert.match(demo.structured.process.rag.method, /重排序/);
 assert.equal(demo.structured.process.usage.retrieve.used, 1);
 assert.equal(readCallCounts("rag_demo_fixture").retrieve, 1);
 
+const policySid = "rag_policy_aside_fixture";
+await guideAct({ action: "reset", sessionId: policySid });
+const tables = await guideAct({ action: "turn", sessionId: policySid, text: "只看餐桌，预算3000元" });
+const tableId = tables.structured.candidateIds[0];
+await guideAct({ action: "confirm", sessionId: policySid, productId: tableId });
+const beforePolicy = readCallCounts(policySid);
+const warranty = await guideAct({ action: "turn", sessionId: policySid, text: "沙发质保多久" });
+assert.equal(warranty.ok, true);
+assert.equal(warranty.structured.confirmedId, tableId);
+assert.deepEqual(warranty.structured.candidateIds, tables.structured.candidateIds);
+assert.equal(warranty.structured.constraints.category, "餐桌");
+assert.equal(warranty.structured.constraints.budget_max_cny, 3000);
+assert.equal(warranty.structured.pendingQuestion, null);
+assert.match(warranty.leadText, /售后说明/);
+assert.equal(warranty.leadText.includes("资料缺失"), false);
+assert.equal(readCallCounts(policySid).retrieve, beforePolicy.retrieve);
+assert.equal(readCallCounts(policySid).policy, 1);
+
 const picked = await guideAct({
   action: "turn",
   sessionId: "rag_price_fixture",

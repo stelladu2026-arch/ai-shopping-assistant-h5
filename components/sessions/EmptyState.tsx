@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 interface EmptyStateProps {
   title: string;
@@ -11,9 +13,9 @@ interface EmptyStateProps {
 
 export function EmptyState({ title, description, icon = "inbox", action }: EmptyStateProps) {
   return (
-    <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
+    <Card className="flex flex-col items-center justify-center px-6 py-12 text-center">
       <span
-        className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-slate-200/80 bg-white text-slate-300 shadow-sm"
+        className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-muted text-muted-foreground"
         aria-hidden
       >
         {icon === "star" ? (
@@ -34,20 +36,17 @@ export function EmptyState({ title, description, icon = "inbox", action }: Empty
           </svg>
         )}
       </span>
-      <p className="text-[0.9rem] font-semibold text-slate-700">{title}</p>
+      <p className="text-[15px] font-semibold text-foreground">{title}</p>
       {description ? (
-        <p className="mt-2 max-w-[16rem] text-[0.78rem] font-medium leading-relaxed text-slate-500">
+        <p className="mt-2 max-w-[16rem] text-[13px] leading-relaxed text-muted-foreground">
           {description}
         </p>
       ) : null}
       {action ? (
-        <Link
-          href={action.href}
-          className="mt-5 inline-flex rounded-xl bg-brand-600 px-4 py-2.5 text-[0.8rem] font-semibold text-white shadow-sm active:bg-brand-700"
-        >
-          {action.label}
-        </Link>
+        <Button asChild className="mt-5">
+          <Link href={action.href}>{action.label}</Link>
+        </Button>
       ) : null}
-    </div>
+    </Card>
   );
 }

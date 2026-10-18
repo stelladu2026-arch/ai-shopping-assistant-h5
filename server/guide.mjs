@@ -1,5 +1,23 @@
+import {readFileSync} from 'node:fs';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
 import catalog from '../data/catalog.json' with { type: 'json' };
 import promotions from '../data/promotions.json' with { type: 'json' };
+
+const POLICY_QUESTION = /售后|坏了|维修|退换|退货|换货|质保|保修多久|禁止承诺|不能承诺|活动叠加|能不能叠加|怎么叠加/;
+const SHOPPING_EDIT = /预算|便宜|宽度|厘米|cm|不要|排除|换一款|重新选|换一个|改看|小户型|尺寸不限|颜色不限|颜色不变|颜色也可以/;
+
+function policyReply() {
+  try {
+    const file = path.join(path.dirname(fileURLToPath(import.meta.url)), '../data/knowledge/售后说明.md');
+    const raw = readFileSync(file, 'utf8');
+    const body = raw.replace(/^---[\s\S]*?---\s*/, '').replace(/^#\s+.+\n+/, '').trim();
+    if (body) return body;
+  } catch {
+    /* 资料缺失时用同一句口径，不改已确认商品 */
+  }
+  return '现行售后资料没有承诺终身保修、免费送装或环保认证。旧口径里出现过的终身保修已经作废，不能当成现在的事实。';
+}
 
 const LIGHT_COLORS = ['米白', '浅灰'];
 const CATEGORIES = ['沙发', '餐桌', '休闲椅', '床架'];
@@ -172,6 +190,11 @@ function constraintsChanged(before, after) {
 export function applyTurn(state, text, clientRevision) {
   if (clientRevision != null && clientRevision !== state.revision) {
     return {ok: false, error: 'revision_conflict', state, searched: false, composed: false};
+  }
+  if (POLICY_QUESTION.test(text) && !SHOPPING_EDIT.test(text)) {
+    const next = structuredClone(state);
+    next.revision += 1;
+    return {ok: true, status: 'policy', reply: policyReply(), state: next, searched: false, composed: false};
   }
   const next = structuredClone(state);
   const before = structuredClone(next.constraints);

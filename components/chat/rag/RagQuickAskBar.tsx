@@ -8,14 +8,14 @@ interface RagQuickAskBarProps {
 
 export function RagQuickAskBar({ onPickPreset }: RagQuickAskBarProps) {
   return (
-    <div className="bg-white px-2 py-2">
-      <div className="-mx-1 flex gap-1.5 overflow-x-auto pb-0.5 pt-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <div className="w-full min-w-0 bg-card px-4 pb-1 pt-2">
+      <div className="flex flex-wrap gap-2">
         {RAG_PRESET_QUESTIONS.map((q) => (
           <button
             key={q}
             type="button"
             onClick={() => onPickPreset(q)}
-            className="max-w-[11rem] shrink-0 rounded-2xl border border-slate-200/80 bg-white px-3 py-2 text-left text-[0.75rem] font-semibold leading-snug text-slate-700 shadow-sm transition-colors duration-75 active:bg-slate-100"
+            className="max-w-full rounded-xl border border-border bg-background px-3 py-2 text-left text-xs font-semibold leading-snug text-foreground transition-colors duration-150 active:bg-accent"
           >
             {q}
           </button>

@@ -1,9 +1,10 @@
 "use client";
 
-import { storeDashboardMock } from "@/mock/storeInsights";
+import type { StoreDashboardMetrics } from "@/types/store-insights";
 
-export function StoreInsightsDashboard() {
-  const m = storeDashboardMock;
+export function StoreInsightsDashboard({ metrics }: { metrics: StoreDashboardMetrics | null }) {
+  if (!metrics) return null;
+  const m = metrics;
   const { product, campaign, copy: copyIntent } = m.intentShare;
 
   const pct = (v: number) => `${Math.round(v * 100)}%`;
@@ -12,22 +13,22 @@ export function StoreInsightsDashboard() {
     {
       label: "活跃导购数",
       value: String(m.activeGuides),
-      hint: "本周有会话记录的导购",
+      hint: "近 7 天有会话的导购",
     },
     {
       label: "本周会话量",
       value: String(m.weeklySessionCount),
-      hint: "本店演示口径 · 自然周",
+      hint: "近 7 天已保存的会话",
     },
     {
       label: "意图分布",
       value: `${pct(product)} / ${pct(campaign)} / ${pct(copyIntent)}`,
-      hint: "产品 / 活动 / 文案（演示归类）",
+      hint: "产品 / 活动 / 文案",
     },
     {
       label: "复制率 · 重新生成率",
       value: `${pct(m.copyRate)} · ${pct(m.regenerateRate)}`,
-      hint: "基于本会话样本估算（演示）",
+      hint: "按已保存会话统计",
     },
   ];
 

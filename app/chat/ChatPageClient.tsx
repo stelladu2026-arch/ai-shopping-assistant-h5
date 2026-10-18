@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AssistantBubble } from "@/components/chat/AssistantBubble";
 import { ChatHeader } from "@/components/chat/ChatHeader";
+import { MomentsComposerBar } from "@/components/chat/moments/MomentsComposerBar";
 import { MomentsInputPanel } from "@/components/chat/moments/MomentsInputPanel";
 import { MomentsSetupSheet } from "@/components/chat/moments/MomentsSetupSheet";
 import { RagComposerBar } from "@/components/chat/rag/RagComposerBar";
@@ -31,7 +32,7 @@ import {
   parseMomentsOutputKind,
   toAgentPayload,
 } from "@/lib/chat/chatPageShared";
-import { buildSessionRecord, deriveSessionTitleDual, getSession, setLastActiveSessionId, upsertSession } from "@/lib/sessions";
+import { buildSessionRecord, getSession, sessionTitleFor, setLastActiveSessionId, upsertSession } from "@/lib/sessions";
 import { chatInitialMessages } from "@/mock/chat";
 import type {
   AgentScene,
@@ -121,6 +122,11 @@ export function ChatPageClient() {
         }),
       });
       const payload = await response.json();
+      if (!response.ok) {
+        setToastMsg(payload.leadText || "没有确认成这件商品，请再点一次。");
+        if (payload?.structured?.scene === "guide_turn") setGuideTurn(payload.structured);
+        return;
+      }
       if (payload?.structured?.scene === "guide_turn") setGuideTurn(payload.structured);
       setSceneMode("moments_marketing");
     } finally {
@@ -237,8 +243,9 @@ export function ChatPageClient() {
         body: JSON.stringify({
           action: "sync",
           sessionId,
+          customerName: getSession(sessionId)?.customerName || "",
           transcript: {
-            title: deriveSessionTitleDual(moments, rag),
+            title: sessionTitleFor(sessionId, moments, rag),
             sceneMode,
             messagesMoments: moments,
             messagesRag: rag,
@@ -272,7 +279,7 @@ export function ChatPageClient() {
   const onToggleFavorite = useCallback(
     (message: ChatMessage) => {
       if (!sessionId) return;
-      const sessionTitle = deriveSessionTitleDual(messagesMomentsRef.current, messagesRagRef.current);
+      const sessionTitle = sessionTitleFor(sessionId, messagesMomentsRef.current, messagesRagRef.current);
       const r = toggleFavorite({ sessionId, sessionTitle, message });
       if (r === "added") setToastMsg("已加入收藏");
       else if (r === "removed") setToastMsg("已取消收藏");
@@ -379,31 +386,43 @@ export function ChatPageClient() {
     };
 
     setMomentsFollowUpDraft("");
-    const afterUser = [...messagesMomentsRef.current, userMsg];
-    setMessagesMoments(afterUser);
+    setMessagesMoments((prev) => [...prev, userMsg]);
     setSending(true);
-
-    const momentsInput: MomentsGenerationInput = {
-      ...momentsForm,
-      sellingPoints: [...momentsForm.sellingPoints],
-    };
 
     try {
       const payload = await agentChatRequest({
-        scene: "moments_marketing",
-        messages: afterUser.map(toAgentPayload),
+        scene: "store_rag_query",
+        messages: [{ role: "user", content: text }],
         sessionId,
-        momentsInput,
       });
-      setMessagesMoments((p) => [
-        ...p,
+      if (payload?.structured?.scene === "guide_turn") setGuideTurn(payload.structured);
+      setMessagesMoments((prev) => [
+        ...prev,
         {
           id: payload.messageId || id("a"),
           role: "assistant",
           leadText: payload.leadText,
-          structured: payload.structured,
         },
       ]);
+      if (payload?.structured?.scene === "guide_turn") {
+        setMessagesRag((prev) => {
+          const next = {
+            id: payload.messageId || id("a"),
+            role: "assistant" as const,
+            leadText: payload.leadText,
+            structured: payload.structured,
+          };
+          let index = -1;
+          for (let i = prev.length - 1; i >= 0; i -= 1) {
+            if (prev[i].role === "assistant" && prev[i].structured?.scene === "guide_turn") {
+              index = i;
+              break;
+            }
+          }
+          if (index < 0) return [...prev, userMsg, next];
+          return [...prev.slice(0, index), userMsg, next, ...prev.slice(index + 1)];
+        });
+      }
     } catch {
       setMessagesMoments((p) => [
         ...p,
@@ -415,8 +434,9 @@ export function ChatPageClient() {
       ]);
     } finally {
       setSending(false);
+      if (sessionId) void loadGuide(sessionId);
     }
-  }, [momentsFollowUpDraft, momentsForm, sending]);
+  }, [momentsFollowUpDraft, sending, sessionId, loadGuide]);
 
   const sendRagText = useCallback(async (text: string, file: File | null) => {
     const trimmed = text.trim();
@@ -691,7 +711,7 @@ export function ChatPageClient() {
       if (message && sessionId) {
         const result = toggleFavorite({
           sessionId,
-          sessionTitle: deriveSessionTitleDual(messagesMomentsRef.current, messagesRagRef.current),
+          sessionTitle: sessionTitleFor(sessionId, messagesMomentsRef.current, messagesRagRef.current),
           message,
         });
         setToastMsg(result === "added" ? "已收藏这件商品" : result === "removed" ? "已取消收藏" : "还不能收藏");
@@ -701,7 +721,7 @@ export function ChatPageClient() {
     if (body.action === "open-material") {
       const productName = String(body.productName || "");
       if (productName) {
-        setMomentsForm((prev) => ({ ...prev, productName, outputKind: "rich" }));
+        setMomentsForm((prev) => ({ ...prev, productName, outputKind: prev.outputKind || "rich" }));
       }
       setSceneMode("moments_marketing");
       return;
@@ -715,11 +735,16 @@ export function ChatPageClient() {
         body: JSON.stringify({ ...body, sessionId }),
       });
       const payload = await response.json();
+      if (!response.ok) {
+        setToastMsg(payload.leadText || (payload.error === "revision_conflict" ? "页面已更新，请再试一次。" : "没有完成，请再试一次。"));
+        if (payload?.structured?.scene === "guide_turn") setGuideTurn(payload.structured);
+        return;
+      }
       const action = String(body.action || "");
       const userText = action === "confirm"
         ? `确认了${payload.structured?.confirmedName || "这件商品"}`
         : action === "remember"
-          ? "记住这次约束"
+          ? (body.key === "已确认商品" ? "记住已确认商品" : "记住这次约束")
           : "";
       setMessagesRag((prev) => {
         const user = userText ? [{ id: id("u"), role: "user" as const, text: userText }] : [];
@@ -777,7 +802,7 @@ export function ChatPageClient() {
     <MobileShell
       footer={
         sceneMode === "store_rag_query" ? (
-          <div className="border-t border-slate-200/50 bg-white/95 shadow-[0_-4px_20px_-4px_rgba(15,23,42,0.06)]">
+          <div className="w-full min-w-0 overflow-hidden border-t border-border bg-card shadow-[0_-4px_20px_-4px_rgba(15,23,42,0.06)]">
             <RagQuickAskBar onPickPreset={onRagPreset} />
             <RagComposerBar
               value={ragDraft}
@@ -789,7 +814,17 @@ export function ChatPageClient() {
               sending={sending}
             />
           </div>
-        ) : null
+        ) : (
+          <div className="w-full min-w-0 overflow-hidden border-t border-border bg-card pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_20px_-4px_rgba(15,23,42,0.06)]">
+            <MomentsComposerBar
+              value={momentsFollowUpDraft}
+              onChange={setMomentsFollowUpDraft}
+              onSend={() => void sendMomentsFollowUp()}
+              disabled={sending}
+              sending={sending}
+            />
+          </div>
+        )
       }
     >
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
@@ -811,7 +846,8 @@ export function ChatPageClient() {
           <SceneModeSwitch value={sceneMode} onChange={setSceneMode} />
           {sessionHydrated && sceneMode === "store_rag_query" ? <PriorMemory sessionId={sessionId} revision={messagesRag.length} /> : null}
           <div
-            className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain px-0 pb-4 pt-2 tech-scroll [scrollbar-gutter:stable_both-edges]"
+            key={sceneMode}
+            className="min-h-0 flex-1 animate-in fade-in space-y-1 overflow-y-auto overscroll-contain px-0 pb-4 pt-2 duration-200 tech-scroll [scrollbar-gutter:stable_both-edges]"
             aria-busy={sending}
           >
             {sessionHydrated && sceneMode === "moments_marketing" && guideTurn?.material?.pendingReview ? (

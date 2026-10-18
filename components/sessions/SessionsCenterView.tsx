@@ -4,11 +4,10 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAppSettings } from "@/hooks/useAppSettings";
 import { getFollowUpOverride } from "@/lib/managerInsightsStorage";
-import { deleteSession, listSessions } from "@/lib/sessions";
+import { deleteSession, importSharedSessions, listSessions } from "@/lib/sessions";
 import { listFavorites, mergeServerFavorites, removeFavoriteById } from "@/lib/favorites";
 import type { FavoriteRecord } from "@/types/session";
-import { storeSessionSummariesMock } from "@/mock/storeInsights";
-import type { SessionCenterScope, StoreSessionSummaryItem } from "@/types/store-insights";
+import type { SessionCenterScope, StoreDashboardMetrics, StoreSessionSummaryItem } from "@/types/store-insights";
 import { EmptyState } from "@/components/sessions/EmptyState";
 import { FavoriteDrawer } from "@/components/sessions/FavoriteDrawer";
 import { FavoriteListItem } from "@/components/sessions/FavoriteListItem";
@@ -19,6 +18,9 @@ import { StoreInsightsDashboard } from "@/components/sessions/StoreInsightsDashb
 import { StoreSessionDetailDrawer } from "@/components/sessions/StoreSessionDetailDrawer";
 import { StoreSessionSummaryList } from "@/components/sessions/StoreSessionSummaryList";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { Button } from "@/components/ui/button";
+import { SectionHeader } from "@/components/ui/section-header";
+import { Separator } from "@/components/ui/separator";
 
 function productKey(item: FavoriteRecord) {
   const block = item.structured;
@@ -77,6 +79,8 @@ export function SessionsCenterView({ onToast }: SessionsCenterViewProps) {
   const [scope, setScope] = useState<SessionCenterScope>("mine");
   const [detailId, setDetailId] = useState<string | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [storeSummaries, setStoreSummaries] = useState<StoreSessionSummaryItem[]>([]);
+  const [storeMetrics, setStoreMetrics] = useState<StoreDashboardMetrics | null>(null);
 
   const { isManager, isGuide, hydrated: settingsHydrated } = useAppSettings();
 
@@ -108,11 +112,11 @@ export function SessionsCenterView({ onToast }: SessionsCenterViewProps) {
 
   const mergedSummaries: StoreSessionSummaryItem[] = useMemo(() => {
     void tick;
-    return storeSessionSummariesMock.map((s) => ({
+    return storeSummaries.map((s) => ({
       ...s,
       followUpStatus: getFollowUpOverride(s.id) ?? s.followUpStatus,
     }));
-  }, [tick]);
+  }, [tick, storeSummaries]);
 
   const detailSummary = useMemo(
     () => (detailId ? mergedSummaries.find((s) => s.id === detailId) ?? null : null),
@@ -129,6 +133,18 @@ export function SessionsCenterView({ onToast }: SessionsCenterViewProps) {
         refresh();
       })
       .catch(() => undefined);
+    void fetch("/api/guide/store")
+      .then((response) => response.json())
+      .then((payload) => {
+        importSharedSessions(payload.shares || []);
+        setStoreSummaries(payload.summaries || []);
+        setStoreMetrics(payload.metrics || null);
+        refresh();
+      })
+      .catch(() => {
+        setStoreSummaries([]);
+        setStoreMetrics(null);
+      });
   }, [refresh]);
 
   const handleDeleteSession = useCallback(
@@ -163,27 +179,16 @@ export function SessionsCenterView({ onToast }: SessionsCenterViewProps) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col pb-2">
-      <header className="sticky top-0 z-10 border-b border-slate-200/60 bg-slate-50/95 px-3 py-3 backdrop-blur-sm">
-        <div className="flex items-center justify-between gap-2">
-          <Link
-            href="/"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-600 transition-colors duration-75 active:bg-slate-200/80"
-            aria-label="返回首页"
-          >
-            <svg aria-hidden className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 18l-6-6 6-6" />
-            </svg>
+      <header className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-border bg-background/95 px-4 py-3 backdrop-blur-sm">
+        <div className="min-w-0">
+          <Link href="/" className="text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">
+            首页
           </Link>
-          <div className="min-w-0 flex-1 text-center">
-            <h1 className="truncate text-[0.95rem] font-semibold text-slate-900">会话中心</h1>
-          </div>
-          <Link
-            href="/chat"
-            className="shrink-0 rounded-lg bg-brand-600 px-3 py-1.5 text-[0.72rem] font-semibold text-white shadow-sm active:bg-brand-700"
-          >
-            新对话
-          </Link>
+          <h1 className="truncate text-[17px] font-semibold leading-tight tracking-tight text-foreground">会话中心</h1>
         </div>
+        <Button asChild size="sm">
+          <Link href="/chat">新对话</Link>
+        </Button>
       </header>
 
       {!settingsHydrated ? (
@@ -193,20 +198,26 @@ export function SessionsCenterView({ onToast }: SessionsCenterViewProps) {
           {isManager ? <SessionsScopeToggle value={scope} onChange={setScope} /> : null}
 
           {isManager && scope === "store" ? (
-            <div className="min-h-0 flex-1 px-3 pt-3">
-              <StoreInsightsDashboard />
-              <StoreSessionSummaryList
-                items={mergedSummaries}
-                onOpen={(row) => {
-                  setDetailId(row.id);
-                }}
-              />
+            <div className="min-h-0 flex-1 space-y-6 px-4 pb-6 pt-5">
+              <StoreInsightsDashboard metrics={storeMetrics} />
+              {mergedSummaries.length === 0 ? (
+                <p className="mt-6 px-1 text-[0.82rem] leading-relaxed text-slate-500">还没有导购产生的会话。</p>
+              ) : (
+                <StoreSessionSummaryList
+                  items={mergedSummaries}
+                  onOpen={(row) => {
+                    setDetailId(row.id);
+                  }}
+                />
+              )}
             </div>
           ) : (
             <>
-              <SessionTabs value={tab} onChange={setTab} />
+              <div className="px-4 pt-4">
+                <SessionTabs value={tab} onChange={setTab} />
+              </div>
 
-              <div className="min-h-0 flex-1 px-3 pt-3">
+              <div key={tab} className="min-h-0 flex-1 animate-in fade-in slide-in-from-bottom-1 px-4 pb-6 pt-4 duration-200">
                 {tab === "recent" ? (
                   sessions.length === 0 ? (
                     <EmptyState
@@ -216,12 +227,13 @@ export function SessionsCenterView({ onToast }: SessionsCenterViewProps) {
                       action={{ label: "去首页常用提问", href: "/" }}
                     />
                   ) : (
-                    <ul className="space-y-2.5 pb-6">
+                    <ul className="space-y-3">
                       {sessions.map((s) => (
                         <SessionListItem
                           key={s.id}
                           session={s}
                           onDeleteClick={() => setPendingDeleteId(s.id)}
+                          onRenamed={() => setTick((value) => value + 1)}
                         />
                       ))}
                     </ul>
@@ -234,14 +246,14 @@ export function SessionsCenterView({ onToast }: SessionsCenterViewProps) {
                     action={{ label: "进入对话去收藏", href: "/chat" }}
                   />
                 ) : (
-                  <div className="space-y-4 pb-6">
+                  <div className="space-y-8">
                     <section>
-                      <h2 className="px-1 text-[0.85rem] font-bold text-slate-900">商品</h2>
-                      <p className="mt-1 px-1 text-[0.78rem] leading-relaxed text-slate-600">同一件只留最近一条。主按钮是「用这件生成素材」。</p>
+                      <SectionHeader>商品</SectionHeader>
+                      <p className="-mt-1 text-[13px] leading-relaxed text-muted-foreground">同一件只留最近一条。主按钮是「用这件生成素材」。</p>
                       {splitFavorites(favorites).products.length === 0 ? (
                         <p className="mt-2 px-1 text-[0.78rem] text-slate-500">还没有收藏商品。</p>
                       ) : (
-                        <ul className="mt-2 space-y-2.5">
+                        <ul className="mt-3 space-y-3">
                           {splitFavorites(favorites).products.map((f) => (
                             <FavoriteListItem
                               key={f.id}
@@ -255,13 +267,14 @@ export function SessionsCenterView({ onToast }: SessionsCenterViewProps) {
                         </ul>
                       )}
                     </section>
+                    <Separator />
                     <section>
-                      <h2 className="px-1 text-[0.85rem] font-bold text-slate-900">素材</h2>
-                      <p className="mt-1 px-1 text-[0.78rem] leading-relaxed text-slate-600">这里只查看和复制，不会拿去换一件商品。</p>
+                      <SectionHeader>素材</SectionHeader>
+                      <p className="-mt-1 text-[13px] leading-relaxed text-muted-foreground">这里只查看和复制，不会拿去换一件商品。</p>
                       {splitFavorites(favorites).materials.length === 0 ? (
                         <p className="mt-2 px-1 text-[0.78rem] text-slate-500">还没有收藏素材。</p>
                       ) : (
-                        <ul className="mt-2 space-y-2.5">
+                        <ul className="mt-3 space-y-3">
                           {splitFavorites(favorites).materials.map((f) => (
                             <FavoriteListItem
                               key={f.id}

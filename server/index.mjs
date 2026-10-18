@@ -4,19 +4,16 @@ import {existsSync, readFileSync} from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {applyTurn, confirmProduct, createState, productById, publicCatalog} from './guide.mjs';
+import * as store from './store.mjs';
 import {executeImage} from './image.mjs';
 import {executeLiveCopy, modelStatus} from './model-config.mjs';
 import {reflect} from './reflect.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const publicDir = path.join(root, 'public');
-const customers = [
-  {id: 'guest-a', name: '小陈'},
-  {id: 'guest-b', name: '林女士'}
-];
-const sessions = new Map();
-const memory = {guide: [], customers: {'guest-a': [], 'guest-b': []}};
-let memorySeq = 1;
+function loadMemory() {
+  return store.loadMemory();
+}
 
 function loadEnvFile() {
   const file = path.join(root, '.env');
@@ -34,19 +31,47 @@ function send(response, status, body, type = 'application/json; charset=utf-8') 
   response.end(payload);
 }
 
-function customerName(id) {
-  return customers.find(item => item.id === id)?.name || '顾客';
-}
-
 function blankRecord() {
-  return {state: createState(), messages: [], image: null, updatedAt: 0};
+  return {state: createState(), messages: [], image: null, customerName: '', updatedAt: 0};
 }
 
-function makeMemory(scope, customerId, key, value) {
+function conversationMessages(record) {
+  const own = Array.isArray(record.messages) ? record.messages : [];
+  if (own.length) return own;
+  const transcript = record.transcript || {};
+  return [...(transcript.messagesMoments || []), ...(transcript.messagesRag || [])]
+    .map(item => ({role: item.role === 'assistant' ? 'assistant' : 'user', text: String(item.text || item.leadText || '').trim()}))
+    .filter(item => item.text);
+}
+
+function hydrate(record) {
+  const next = record || blankRecord();
+  if (!next.state) next.state = createState();
+  next.messages = conversationMessages(next);
+  if (next.customerName == null) next.customerName = '';
+  return next;
+}
+
+function clipCustomerName(value) {
+  return String(value || '').trim().replace(/\s+/g, ' ').slice(0, 20);
+}
+
+function sessionTitle(record) {
+  const named = clipCustomerName(record.customerName);
+  if (named) return named;
+  const transcriptTitle = String(record.transcript?.title || '').trim();
+  if (transcriptTitle && transcriptTitle !== '新会话') return transcriptTitle.length > 28 ? transcriptTitle.slice(0, 28) + '…' : transcriptTitle;
+  const first = conversationMessages(record).find(item => item.role === 'user' && String(item.text || '').trim());
+  if (!first) return '新会话';
+  const line = String(first.text).trim().split('\n')[0];
+  return line.length > 28 ? line.slice(0, 28) + '…' : line;
+}
+
+function makeMemory(scope, sessionId, key, value) {
   return {
-    id: 'm' + memorySeq++,
+    id: store.nextMemoryId(),
     scope,
-    customer_id: scope === 'guide' ? null : customerId,
+    session_id: scope === 'guide' ? null : sessionId,
     key: String(key || '').slice(0, 40),
     value: String(value || '').slice(0, 240),
     status: 'remembered',
@@ -56,18 +81,33 @@ function makeMemory(scope, customerId, key, value) {
   };
 }
 
-function guideTone() {
+function guideTone(memory = loadMemory()) {
   return memory.guide.find(item => item.key === '语气')?.value || null;
 }
 
-function visibleMemory(customerId) {
-  return {guide: memory.guide, customer: memory.customers[customerId] || []};
+function visibleMemory(memory, sessionId) {
+  return {guide: memory.guide, session: memory.sessions?.[sessionId] || []};
 }
 
-function sessionFor(customerId) {
-  const id = customerId === 'guest-b' ? 'guest-b' : 'guest-a';
-  if (!sessions.has(id)) sessions.set(id, blankRecord());
-  return {id, record: sessions.get(id)};
+function getSession(sessionId) {
+  if (!sessionId) return null;
+  const record = store.loadSession(sessionId);
+  if (!record) return null;
+  return {id: sessionId, record: hydrate(record)};
+}
+
+function persistSession(session) {
+  store.saveSession(session.id, session.record);
+}
+
+function createSession() {
+  const id = store.nextSessionId();
+  const record = blankRecord();
+  store.saveSession(id, record);
+  const memory = loadMemory();
+  memory.sessions[id] = memory.sessions[id] || [];
+  store.saveMemory(memory);
+  return {id, record};
 }
 
 function remember(record, message) {
@@ -76,13 +116,20 @@ function remember(record, message) {
   if (record.messages.length > 40) record.messages.splice(0, record.messages.length - 40);
 }
 
+function clip(text) {
+  const line = String(text || '').trim().split('\n')[0];
+  return line.length > 42 ? line.slice(0, 42) + '…' : line;
+}
+
 function summary(id, record) {
-  const last = [...record.messages].reverse().find(item => item.role === 'user');
+  const messages = conversationMessages(record);
+  const lastReply = [...messages].reverse().find(item => item.role === 'assistant' && String(item.text || '').trim());
   const product = record.state.confirmed_product_id ? productById(record.state.confirmed_product_id) : null;
   return {
     id,
-    name: customerName(id),
-    preview: last?.text || '还没有这位顾客的需求',
+    name: sessionTitle(record),
+    customer_name: clipCustomerName(record.customerName),
+    preview: lastReply ? clip(lastReply.text) : (messages.length ? '还没有回复' : '还没有消息'),
     revision: record.state.revision,
     confirmed_name: product?.name || null,
     updatedAt: record.updatedAt
@@ -96,9 +143,11 @@ async function readJson(request) {
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
 
-function view(result, customerId) {
+function view(result, sessionId) {
   const status = modelStatus();
-  const record = sessions.get(customerId);
+  const loaded = store.loadSession(sessionId);
+  const record = loaded ? hydrate(loaded) : null;
+  const memory = loadMemory();
   return {
     ok: result.ok,
     error: result.error || null,
@@ -106,14 +155,15 @@ function view(result, customerId) {
     reply: result.reply || null,
     searched: Boolean(result.searched),
     composed: Boolean(result.composed),
-    customer_id: customerId,
-    customer_name: customerName(customerId),
+    session_id: sessionId,
+    title: record ? sessionTitle(record) : '新会话',
+    customer_name: record ? clipCustomerName(record.customerName) : '',
     mode: status.mode,
-    guide_tone: guideTone(),
+    guide_tone: guideTone(memory),
     messages: record?.messages || [],
     state: result.state,
     reflection: reflect(result.state),
-    memories: visibleMemory(customerId),
+    memories: visibleMemory(memory, sessionId),
     image: record?.image && record.image.product_id === result.state?.confirmed_product_id ? record.image : null
   };
 }
@@ -163,40 +213,76 @@ async function handleApi(request, response, url) {
     send(response, 200, modelStatus());
     return;
   }
+  if (request.method === 'POST' && url.pathname === '/api/sessions') {
+    const session = createSession();
+    send(response, 200, view({ok: true, status: 'created', reply: null, state: session.record.state}, session.id));
+    return;
+  }
+  if (request.method === 'POST' && url.pathname === '/api/session/name') {
+    const body = await readJson(request);
+    const session = getSession(body.session_id);
+    if (!session) {
+      send(response, 404, {error: 'session_not_found'});
+      return;
+    }
+    session.record.customerName = clipCustomerName(body.name);
+    persistSession(session);
+    send(response, 200, view({ok: true, status: 'renamed', reply: null, state: session.record.state}, session.id));
+    return;
+  }
   if (request.method === 'GET' && url.pathname === '/api/session') {
-    const session = sessionFor(url.searchParams.get('customer_id'));
+    const session = getSession(url.searchParams.get('session_id'));
+    if (!session) {
+      send(response, 404, {error: 'session_not_found'});
+      return;
+    }
     send(response, 200, view({ok: true, status: 'current', reply: null, state: session.record.state}, session.id));
     return;
   }
   if (request.method === 'GET' && url.pathname === '/api/sessions') {
-    const list = customers.map(item => summary(item.id, sessionFor(item.id).record));
-    send(response, 200, {sessions: list, guide_tone: guideTone(), memory});
+    const memory = loadMemory();
+    const list = store.listSessionRows().map(row => summary(row.id, hydrate(row.record)));
+    send(response, 200, {sessions: list, guide_tone: guideTone(memory), memory, favorites: store.listFavorites()});
     return;
   }
   if (request.method === 'POST' && url.pathname === '/api/memory') {
     const body = await readJson(request);
-    const session = sessionFor(body.customer_id);
+    const memory = loadMemory();
+    const session = body.session_id ? getSession(body.session_id) : null;
     if (body.tone === '简洁' || body.tone === '热情') {
       const existing = memory.guide.find(item => item.key === '语气');
       if (existing) existing.value = body.tone;
       else memory.guide.push(makeMemory('guide', null, '语气', body.tone));
-    } else if (body.action === 'remember' && (body.scope === 'guide' || body.scope === 'customer')) {
-      const scope = body.scope === 'guide' ? 'guide' : 'customer';
-      const bucket = scope === 'guide' ? memory.guide : memory.customers[session.id];
-      bucket.push(makeMemory(scope, session.id, body.key, body.value));
+    } else if (body.action === 'remember' && (body.scope === 'guide' || body.scope === 'session')) {
+      const scope = body.scope === 'guide' ? 'guide' : 'session';
+      if (scope === 'session' && !session) {
+        send(response, 404, {error: 'session_not_found'});
+        return;
+      }
+      if (scope === 'session' && !memory.sessions[session.id]) memory.sessions[session.id] = [];
+      const bucket = scope === 'guide' ? memory.guide : memory.sessions[session.id];
+      bucket.push(makeMemory(scope, session?.id || null, body.key, body.value));
     } else if (body.action === 'delete') {
       if (!body.id) memory.guide = memory.guide.filter(item => item.key !== '语气');
       else {
         memory.guide = memory.guide.filter(item => item.id !== body.id);
-        memory.customers[session.id] = (memory.customers[session.id] || []).filter(item => item.id !== body.id);
+        for (const bucket of Object.values(memory.sessions)) {
+          const index = bucket.findIndex(item => item.id === body.id);
+          if (index >= 0) bucket.splice(index, 1);
+        }
       }
     }
-    send(response, 200, {guide_tone: guideTone(), memories: visibleMemory(session.id), memory});
+    store.saveMemory(memory);
+    send(response, 200, {guide_tone: guideTone(memory), memories: visibleMemory(memory, session?.id), memory});
     return;
   }
   if (request.method === 'POST' && url.pathname === '/api/image') {
     const body = await readJson(request);
-    const session = sessionFor(body.customer_id);
+    const session = getSession(body.session_id);
+    if (!session) {
+      send(response, 404, {error: 'session_not_found'});
+      return;
+    }
     if (session.record.state.revision !== Number(body.revision)) {
       send(response, 409, view({ok: false, error: 'revision_conflict', state: session.record.state}, session.id));
       return;
@@ -213,10 +299,40 @@ async function handleApi(request, response, url) {
       pending_human: true,
       label: generated.label,
       product_id: product.id,
+      url: generated.url || '',
       request: generated.request
     };
     remember(session.record, {role: 'assistant', text: generated.simulation ? '配图仍是演示回放，待核对，没有调用生图接口。' : '配图已请求，结果仍待核对。'});
+    persistSession(session);
     send(response, 200, view({ok: true, status: 'image', reply: session.record.messages.at(-1).text, state: session.record.state}, session.id));
+    return;
+  }
+  if (request.method === 'POST' && url.pathname === '/api/favorites') {
+    const body = await readJson(request);
+    const session = getSession(body.session_id);
+    if (!session) {
+      send(response, 404, {error: 'session_not_found'});
+      return;
+    }
+    const sourceId = String(body.source_id || '').slice(0, 80);
+    if (!sourceId) {
+      send(response, 400, {error: 'missing_source'});
+      return;
+    }
+    const existing = store.listFavorites().find(item => item.source_id === sourceId);
+    if (body.remove || existing) store.deleteFavorite(sourceId);
+    else {
+      store.saveFavorite({
+        id: 'fav_' + Date.now().toString(36),
+        source_id: sourceId,
+        session_id: session.id,
+        kind: body.kind === 'material' ? 'material' : 'product',
+        title: String(body.title || '收藏').slice(0, 80),
+        content: String(body.content || '').slice(0, 2000),
+        session_title: sessionTitle(session.record),
+      });
+    }
+    send(response, 200, {favorites: store.listFavorites()});
     return;
   }
   if (request.method === 'GET' && url.pathname === '/api/catalog') {
@@ -225,17 +341,25 @@ async function handleApi(request, response, url) {
   }
   if (request.method === 'POST' && url.pathname === '/api/reset') {
     const body = await readJson(request);
-    const session = sessionFor(body.customer_id);
+    const session = getSession(body.session_id);
+    if (!session) {
+      send(response, 404, {error: 'session_not_found'});
+      return;
+    }
     session.record.state = createState();
     session.record.messages = [];
     session.record.image = null;
-    session.record.updatedAt = Date.now();
-    send(response, 200, view({ok: true, status: 'reset', reply: '已清空这位顾客的本次选品，其他顾客不受影响。', state: session.record.state}, session.id));
+    persistSession(session);
+    send(response, 200, view({ok: true, status: 'reset', reply: '已清空这次选品。记下的内容还在。', state: session.record.state}, session.id));
     return;
   }
   if (request.method === 'POST' && (url.pathname === '/api/turn' || url.pathname === '/api/confirm')) {
     const body = await readJson(request);
-    const session = sessionFor(body.customer_id);
+    const session = getSession(body.session_id);
+    if (!session) {
+      send(response, 404, {error: 'session_not_found'});
+      return;
+    }
     const text = String(body.text || '');
     const result = url.pathname === '/api/confirm'
       ? confirmProduct(session.record.state, body.product_id, body.revision)
@@ -249,6 +373,7 @@ async function handleApi(request, response, url) {
     }
       session.record.state = settled.state;
       if (settled.reply) remember(session.record, {role: 'assistant', text: settled.reply, status: settled.status});
+      persistSession(session);
     }
     send(response, settled.ok ? 200 : 409, view(settled, session.id));
     return;

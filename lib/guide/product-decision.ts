@@ -28,8 +28,11 @@ async function readStore(sessionId, query) {
 }
 
 export async function answerStoreDoc(sessionId, query, options = {}) {
-  const gate = consumeCall(sessionId, "retrieve", LIMITS.retrieve);
-  if (!gate.ok) return { ok: true, found: false, capped: true, text: capText("retrieve"), trace: null };
+  let gate = consumeCall(sessionId, "retrieve", LIMITS.retrieve);
+  if (!gate.ok) {
+    gate = consumeCall(sessionId, "policy", LIMITS.policy);
+    if (!gate.ok) return { ok: true, found: false, capped: true, text: capText("retrieve"), trace: null };
+  }
   const hit = await retrieve(query, options.knowledgeDir, options);
   return {
     ok: true,
