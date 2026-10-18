@@ -119,7 +119,7 @@ export function AssistantBubble({
           <p className="text-[0.88rem] font-medium leading-relaxed text-slate-700">{leadText}</p>
         ) : null}
         {structured?.scene === "guide_turn" && onGuideAction ? (
-          <GuideTurnCard data={structured} disabled={actionsDisabled} onAction={onGuideAction} />
+          <GuideTurnCard data={structured} leadText={leadText} disabled={actionsDisabled} onAction={onGuideAction} />
         ) : null}
         {structured?.scene === "moments_marketing" ? (
           <div>
