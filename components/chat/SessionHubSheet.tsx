@@ -79,7 +79,7 @@ export function SessionHubSheet({
 
   return createPortal(
     <PhoneFrameOverlay onBackdropClick={onClose} ariaLabel="会话">
-      <aside className="absolute right-0 top-0 flex h-full w-[min(20rem,90%)] max-w-[320px] flex-col bg-white shadow-[-8px_0_32px_rgba(15,23,42,0.12)]">
+      <aside className="absolute right-0 top-0 flex h-full w-[min(20rem,90%)] max-w-[320px] animate-in flex-col bg-card shadow-[-8px_0_32px_rgba(15,23,42,0.12)] slide-in-from-right duration-200">
         <div className="flex items-center justify-between border-b border-slate-100 px-3 py-3">
           <div>
             <h2 className="text-[0.9rem] font-bold text-slate-900">会话</h2>

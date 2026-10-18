@@ -802,7 +802,7 @@ export function ChatPageClient() {
     <MobileShell
       footer={
         sceneMode === "store_rag_query" ? (
-          <div className="border-t border-slate-200/50 bg-white/95 shadow-[0_-4px_20px_-4px_rgba(15,23,42,0.06)]">
+          <div className="w-full min-w-0 overflow-hidden border-t border-border bg-card shadow-[0_-4px_20px_-4px_rgba(15,23,42,0.06)]">
             <RagQuickAskBar onPickPreset={onRagPreset} />
             <RagComposerBar
               value={ragDraft}
@@ -815,7 +815,7 @@ export function ChatPageClient() {
             />
           </div>
         ) : (
-          <div className="border-t border-slate-200/50 bg-white/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_20px_-4px_rgba(15,23,42,0.06)]">
+          <div className="w-full min-w-0 overflow-hidden border-t border-border bg-card pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_20px_-4px_rgba(15,23,42,0.06)]">
             <MomentsComposerBar
               value={momentsFollowUpDraft}
               onChange={setMomentsFollowUpDraft}
@@ -846,7 +846,8 @@ export function ChatPageClient() {
           <SceneModeSwitch value={sceneMode} onChange={setSceneMode} />
           {sessionHydrated && sceneMode === "store_rag_query" ? <PriorMemory sessionId={sessionId} revision={messagesRag.length} /> : null}
           <div
-            className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain px-0 pb-4 pt-2 tech-scroll [scrollbar-gutter:stable_both-edges]"
+            key={sceneMode}
+            className="min-h-0 flex-1 animate-in fade-in space-y-1 overflow-y-auto overscroll-contain px-0 pb-4 pt-2 duration-200 tech-scroll [scrollbar-gutter:stable_both-edges]"
             aria-busy={sending}
           >
             {sessionHydrated && sceneMode === "moments_marketing" && guideTurn?.material?.pendingReview ? (

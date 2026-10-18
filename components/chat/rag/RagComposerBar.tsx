@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef } from "react";
+import { Button } from "@/components/ui/button";
 
 interface RagComposerBarProps {
   value: string;
@@ -25,12 +26,12 @@ export function RagComposerBar({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   return (
-    <div className="bg-white pt-2">
-      <div className="px-3">
-        <label className="sr-only" htmlFor="rag-composer-input">
+    <div className="bg-card px-4 pb-3 pt-2">
+      <div>
+        <label className="mb-1.5 block text-xs font-medium text-muted-foreground" htmlFor="rag-composer-input">
           顾客需求
         </label>
-        <div className="flex h-11 items-center gap-1 rounded-xl border border-slate-200/80 bg-slate-50/80 pl-3 pr-1.5 transition-shadow duration-75 focus-within:border-brand-400 focus-within:ring-2 focus-within:ring-brand-500/20">
+        <div className="flex h-11 items-center gap-1 rounded-xl border border-input bg-background pl-3 pr-1 transition-shadow duration-150 focus-within:ring-2 focus-within:ring-ring">
           <input
             id="rag-composer-input"
             type="text"
@@ -70,11 +71,12 @@ export function RagComposerBar({
           >
             📷
           </button>
-          <button
+          <Button
             type="button"
+            size="sm"
             disabled={disabled || sending || !value.trim()}
             onClick={onSend}
-            className="flex h-8 min-w-[3.75rem] shrink-0 items-center justify-center gap-1 rounded-lg bg-brand-600 px-2 text-[0.78rem] font-bold text-white shadow-sm transition-colors duration-75 active:bg-brand-700 disabled:opacity-40"
+            className="h-8 min-w-[4.25rem] shrink-0"
           >
             {sending ? (
               <>
@@ -87,7 +89,7 @@ export function RagComposerBar({
             ) : (
               "发送"
             )}
-          </button>
+          </Button>
         </div>
         {fileName ? (
           <p className="mt-1 text-[0.65rem] font-medium text-brand-800">已选凭证：{fileName}</p>

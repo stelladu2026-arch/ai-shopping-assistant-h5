@@ -122,7 +122,7 @@ function navigateToPolicyQuery(router: ReturnType<typeof useRouter>) {
 function MarketingSubActionButtons({ subs }: { subs: NonNullable<QuickActionData["subActions"]> }) {
   const router = useRouter();
   return (
-    <div className="mt-2 grid w-full grid-cols-3 gap-1.5">
+    <div className="mt-3 grid w-full grid-cols-3 gap-2">
       {subs.map((sub) => (
         <button
           key={sub.id}
@@ -138,7 +138,7 @@ function MarketingSubActionButtons({ subs }: { subs: NonNullable<QuickActionData
             });
             router.push(`/chat?${q.toString()}`);
           }}
-          className="flex min-h-[2.25rem] min-w-0 cursor-pointer items-center justify-center rounded-lg border border-slate-200/90 bg-white px-1 py-1.5 text-center text-[10px] font-semibold leading-tight text-brand-900/90 shadow-sm transition-[background-color,border-color,transform] duration-75 hover:border-brand-300/80 hover:bg-brand-50/90 active:scale-[0.98] active:bg-brand-50 sm:text-[11px]"
+          className="flex h-9 min-w-0 cursor-pointer items-center justify-center rounded-lg border border-border bg-background px-1 text-center text-xs font-semibold leading-tight text-foreground transition-all duration-150 hover:bg-accent active:scale-[0.98]"
         >
           {sub.label}
         </button>
@@ -149,30 +149,32 @@ function MarketingSubActionButtons({ subs }: { subs: NonNullable<QuickActionData
 
 function RowBody({ item, hasSubActions }: { item: QuickActionData; hasSubActions: boolean }) {
   return (
-    <>
-      <span
-        className="flex h-[4.5rem] w-[4.5rem] shrink-0 items-center justify-center rounded-2xl border border-slate-200/75 bg-slate-100 text-brand-800 shadow-sm sm:h-[4.75rem] sm:w-[4.75rem]"
-        aria-hidden
-      >
-        {iconMap[item.icon]}
-      </span>
-      <div className="flex min-w-0 flex-1 items-center gap-3 text-left">
-        <div className="min-w-0 flex-1">
-          <span className="block text-[0.95rem] font-semibold leading-snug text-slate-900 sm:text-base">
+    <div className="min-w-0 flex-1">
+      <div className="flex items-center gap-3">
+        <span
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-accent text-primary [&_svg]:h-5 [&_svg]:w-5"
+          aria-hidden
+        >
+          {iconMap[item.icon]}
+        </span>
+        <div className="min-w-0 flex-1 text-left">
+          <span className="block text-[15px] font-semibold leading-snug text-foreground">
             {item.title}
           </span>
           {item.description?.trim() ? (
-            <p className="mt-1 line-clamp-2 text-[0.8rem] leading-relaxed text-slate-500 sm:text-sm">
+            <p className="mt-1 line-clamp-2 text-[13px] leading-relaxed text-muted-foreground">
               {item.description}
             </p>
-          ) : null}
-          {hasSubActions ? (
-            <MarketingSubActionButtons subs={item.subActions!} />
           ) : null}
         </div>
         <ChevronRightIcon />
       </div>
-    </>
+      {hasSubActions ? (
+        <div className="pl-14">
+          <MarketingSubActionButtons subs={item.subActions!} />
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -181,10 +183,9 @@ export function ActionCard({ item }: ActionCardProps) {
   const hasSubActions = Boolean(item.subActions?.length);
 
   const rowInteractive =
-    "flex w-full cursor-pointer items-center gap-3.5 border-b border-slate-200/40 bg-white px-5 py-4 text-left transition-[background-color] duration-150 last:border-b-0 hover:bg-slate-50 active:bg-slate-100/95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-400/45";
+    "flex w-full cursor-pointer bg-card px-4 py-3.5 text-left transition-colors duration-150 hover:bg-accent/60 active:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
 
-  const rowGrouped =
-    "flex w-full cursor-default items-center gap-3.5 border-b border-slate-200/40 bg-white px-5 py-4 text-left transition-[background-color] duration-150 last:border-b-0 hover:bg-slate-50/90";
+  const rowGrouped = "flex w-full cursor-default bg-card px-4 py-3.5 text-left";
 
   const rowClassName = hasSubActions ? rowGrouped : rowInteractive;
 

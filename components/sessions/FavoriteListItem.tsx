@@ -3,6 +3,9 @@
 import { useRouter } from "next/navigation";
 import type { FavoriteRecord } from "@/types/session";
 import { formatRelativeTime } from "@/lib/formatRelativeTime";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
 
 function productFacts(item: FavoriteRecord) {
   const block = item.structured;
@@ -24,11 +27,12 @@ export function FavoriteListItem({ item, group, onOpen, onRemove, onCopy }: Favo
   const productId = facts?.id;
 
   return (
-    <li className="rounded-xl border border-slate-200/60 bg-white px-3.5 py-3 shadow-sm">
+    <li>
+      <Card className="px-4 py-3.5">
       <button type="button" onClick={() => onOpen(item)} className="w-full text-left">
-        <div className="flex items-start justify-between gap-2">
-          <h3 className="min-w-0 flex-1 text-[0.88rem] font-semibold leading-snug text-slate-900">{facts?.name || item.title}</h3>
-          <span className="shrink-0 text-[0.68rem] font-medium tabular-nums text-slate-400">{formatRelativeTime(item.createdAt)}</span>
+        <div className="flex items-baseline justify-between gap-3">
+          <h3 className="min-w-0 flex-1 text-[15px] font-semibold leading-snug text-foreground">{facts?.name || item.title}</h3>
+          <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{formatRelativeTime(item.createdAt)}</span>
         </div>
       </button>
       {facts ? (
@@ -46,45 +50,34 @@ export function FavoriteListItem({ item, group, onOpen, onRemove, onCopy }: Favo
       ) : (
         <p className="mt-2 text-[0.78rem] leading-relaxed text-slate-600">这条没有带上规格，不能直接生成。请回到选品重新收藏。</p>
       )}
-      <div className="mt-3 flex flex-col gap-2 border-t border-slate-100 pt-2.5">
+      <Separator className="my-3" />
+      <div className="flex flex-col gap-2">
         {group === "product" && productId ? (
-          <button
+          <Button
             type="button"
             onClick={() => {
               const sid = `sess_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
               router.push(`/chat?sessionId=${sid}&scene=moments_marketing&outputKind=rich&catalogProduct=${encodeURIComponent(productId)}`);
             }}
-            className="min-h-11 w-full rounded-xl bg-brand-600 text-[0.85rem] font-bold text-white active:bg-brand-700"
           >
             用这件生成素材
-          </button>
+          </Button>
         ) : null}
         <div className="flex gap-2">
           {group === "material" ? (
-            <button
-              type="button"
-              onClick={() => onOpen(item)}
-              className="flex flex-1 items-center justify-center rounded-lg border border-slate-200/80 bg-slate-50 py-2 text-[0.72rem] font-semibold text-slate-700 active:bg-slate-100"
-            >
+            <Button type="button" variant="outline" size="sm" className="flex-1" onClick={() => onOpen(item)}>
               查看
-            </button>
+            </Button>
           ) : null}
-          <button
-            type="button"
-            onClick={() => onCopy(item.contentPlain)}
-            className="flex flex-1 items-center justify-center rounded-lg border border-slate-200/80 bg-slate-50 py-2 text-[0.72rem] font-semibold text-slate-700 active:bg-slate-100"
-          >
+          <Button type="button" variant="outline" size="sm" className="flex-1" onClick={() => onCopy(item.contentPlain)}>
             复制
-          </button>
-          <button
-            type="button"
-            onClick={() => onRemove(item.id)}
-            className="rounded-lg px-3 py-2 text-[0.72rem] font-semibold text-slate-500 active:bg-slate-100"
-          >
+          </Button>
+          <Button type="button" variant="ghost" size="sm" onClick={() => onRemove(item.id)}>
             取消收藏
-          </button>
+          </Button>
         </div>
       </div>
+      </Card>
     </li>
   );
 }

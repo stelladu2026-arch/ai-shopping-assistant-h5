@@ -38,9 +38,9 @@ export function QuestionChip({ item }: QuestionChipProps) {
         });
         router.push(`/chat?${q.toString()}`);
       }}
-      className="flex w-full items-center justify-between gap-2 border-b border-slate-200/40 bg-white/90 px-5 py-4 text-left transition-colors duration-75 last:border-b-0 active:bg-slate-100"
+      className="flex w-full items-center justify-between gap-3 bg-card px-4 py-3.5 text-left transition-colors duration-150 active:bg-accent"
     >
-      <span className="min-w-0 flex-1 text-left text-[0.92rem] font-medium leading-[1.45] text-slate-800 sm:text-[0.95rem]">
+      <span className="min-w-0 flex-1 text-left text-[15px] font-medium leading-snug text-foreground">
         {item.label}
       </span>
       {chevron}

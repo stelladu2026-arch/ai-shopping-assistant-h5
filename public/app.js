@@ -173,7 +173,10 @@ function renderSessions() {
     clear.className = 'text-btn tap';
     clear.textContent = '清空';
     clear.addEventListener('click', () => resetSession(item.id));
-    row.append(open, rename, clear);
+    const actions = document.createElement('div');
+    actions.className = 'row session-actions';
+    actions.append(rename, clear);
+    row.append(open, actions);
     list.append(row);
   }
 }

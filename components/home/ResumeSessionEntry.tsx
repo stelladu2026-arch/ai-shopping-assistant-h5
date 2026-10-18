@@ -3,6 +3,9 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ChevronRightIcon } from "@/components/icons/ChevronRightIcon";
+import { Button } from "@/components/ui/button";
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { SectionHeader } from "@/components/ui/section-header";
 import { getLastActiveSessionId, pullSharedSessions } from "@/lib/sessions";
 
 interface ResumeSessionEntryProps {
@@ -17,36 +20,30 @@ export function ResumeSessionEntry({ sectionTitle }: ResumeSessionEntryProps) {
   }, []);
 
   return (
-    <section className="mt-4 sm:mt-5">
-      <div className="mb-3.5 flex items-baseline justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <span className="h-4 w-0.5 flex-shrink-0 rounded-full bg-brand-600" aria-hidden />
-          <h2 className="text-[0.9rem] font-semibold leading-snug tracking-wide text-slate-500 sm:text-[0.95rem]">
-            {sectionTitle}
-          </h2>
-        </div>
-      </div>
-      <div className="overflow-hidden rounded-saas border border-slate-200/70 bg-white shadow-surfaceLg ring-1 ring-slate-900/[0.04]">
+    <section>
+      <SectionHeader>{sectionTitle}</SectionHeader>
+      <Card>
         {lastSessionId ? (
           <Link
             href={`/chat?sessionId=${encodeURIComponent(lastSessionId)}`}
-            className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left transition-colors duration-75 active:bg-slate-50"
+            className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left transition-colors duration-150 active:bg-accent"
           >
-            <span className="min-w-0 text-[0.95rem] font-semibold text-slate-900">继续上次会话</span>
+            <span className="min-w-0">
+              <span className="block text-[15px] font-semibold text-foreground">从上次停下的地方接着问</span>
+              <span className="mt-0.5 block text-[13px] text-muted-foreground">本地最近一条会话</span>
+            </span>
             <ChevronRightIcon />
           </Link>
         ) : (
-          <div className="flex flex-col gap-2 px-5 py-4">
-            <p className="text-[0.82rem] font-medium leading-relaxed text-slate-500">暂无本地会话记录。</p>
-            <Link
-              href="/sessions"
-              className="inline-flex w-fit items-center text-[0.82rem] font-semibold text-brand-700 active:underline"
-            >
-              去会话中心开启新对话 ›
-            </Link>
-          </div>
+          <CardHeader>
+            <CardTitle className="text-[15px]">暂无本地会话记录</CardTitle>
+            <CardDescription>开始一次选品或素材对话后，可以从这里接着进行。</CardDescription>
+            <Button asChild size="sm" className="mt-2 w-fit">
+              <Link href="/sessions">去会话中心</Link>
+            </Button>
+          </CardHeader>
         )}
-      </div>
+      </Card>
     </section>
   );
 }
