@@ -61,6 +61,15 @@ function recognizedConstraints(state) {
   return rows;
 }
 
+function fitConstraintInput(input) {
+  const numeric = input.inputMode === 'decimal';
+  const text = input.value.length ? input.value : numeric ? '0000' : '字';
+  let units = 0;
+  for (const char of text) units += char.charCodeAt(0) > 255 ? 2 : 1;
+  const chars = Math.min(12, Math.max(numeric ? 4 : 2, units));
+  input.style.width = `calc(${chars}ch + 1rem)`;
+}
+
 async function editRecognized(field, value, clear) {
   if (busy) return;
   busy = true;
@@ -312,6 +321,8 @@ function renderChat() {
     input.value = row.value;
     input.setAttribute('aria-label', row.name);
     input.inputMode = row.numeric ? 'decimal' : 'text';
+    fitConstraintInput(input);
+    input.addEventListener('input', () => fitConstraintInput(input));
     const save = document.createElement('button');
     save.type = 'button';
     save.className = 'chip-btn tap save';

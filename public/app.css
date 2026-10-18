@@ -274,33 +274,43 @@ button, input { font: inherit; color: inherit; }
 }
 .step.is-on { color: var(--blue); border-color: #c9dafd; background: var(--blue-soft); }
 .facts {
-  margin: 12px var(--space) 0;
+  margin: 8px var(--space) 0;
   background: white;
   border: 1px solid var(--line);
   border-radius: 14px;
-  padding: 0 16px;
+  padding: 2px 10px 8px;
 }
-.facts summary { min-height: var(--control); display: flex; align-items: center; font-size: 14px; font-weight: 650; }
-.fact { margin: 0 0 8px; font-size: 14px; }
+.facts summary { min-height: 32px; display: flex; align-items: center; font-size: 13px; font-weight: 650; }
+.fact { margin: 0; font-size: 13px; }
+#fact-body { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .fact-row {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  margin: 0 0 10px;
-}
-.fact-name { flex: 0 0 auto; font-size: 14px; font-weight: 650; }
-.fact-relax { flex: 0 0 auto; font-size: 12px; color: var(--muted); }
-.fact-row input {
-  width: 4.75rem;
-  min-width: 0;
-  flex: 1 1 4.5rem;
-  min-height: var(--control);
+  gap: 4px;
+  max-width: 100%;
+  margin: 0;
+  padding: 2px 2px 2px 8px;
   border: 1px solid var(--line);
   border-radius: 10px;
-  padding: 0 8px;
-  background: white;
+  background: #f8fafc;
 }
-.fact-row .chip-btn { min-height: 44px; padding: 0 12px; }
+.fact-name { flex: 0 0 auto; font-size: 13px; font-weight: 650; }
+.fact-relax { flex: 0 0 auto; font-size: 12px; color: var(--muted); }
+.fact-row input {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 3.25rem;
+  max-width: 9rem;
+  height: 34px;
+  min-height: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 6px;
+  background: white;
+  font-size: 14px;
+  line-height: 34px;
+}
+.fact-row .chip-btn { min-height: 34px; height: 34px; padding: 0 8px; border-radius: 8px; font-size: 12px; }
 .fact-row .save { background: var(--blue); color: white; border-color: transparent; }
 .fact-row .save:disabled { opacity: 0.4; }
 .fact-row .remove { background: white; color: var(--ink); }
@@ -363,7 +373,7 @@ button, input { font: inherit; color: inherit; }
   padding: 0 12px;
   background: white;
 }
-.send { height: var(--control); padding: 0 16px; }
+.send { height: var(--control); min-height: 44px; padding: 0 16px; }
 .tabbar { justify-content: space-around; align-items: stretch; }
 .tab {
   position: relative;
