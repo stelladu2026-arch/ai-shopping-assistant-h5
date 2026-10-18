@@ -74,14 +74,23 @@ function parseWidth(text) {
     else if (/一米五/.test(part)) found = {value: 150};
     else if (/两米|二米/.test(part)) found = {value: 200};
     else {
-      const matched = part.match(/(\d+(?:\.\d+)?)\s*(厘米|cm|米)/i);
+      const matched = part.match(/(\d+(?:\.\d+)?)\s*(厘米|cm|米)/i) || (/宽/.test(part) ? part.match(/宽[^0-9]{0,8}(\d+(?:\.\d+)?)/) : null);
       if (!matched) continue;
       if (/不是/.test(part) && !/还是|上限/.test(part)) continue;
       const amount = Number(matched[1]);
-      found = {value: matched[2] === '米' ? Math.round(amount * 100) : amount};
+      const unit = matched[2] || '厘米';
+      found = {value: unit === '米' ? Math.round(amount * 100) : amount};
     }
   }
   return found;
+}
+
+function clearsBudget(text) {
+  return /预算不限|不限预算/.test(text);
+}
+
+function clearsCategory(text) {
+  return /品类不限|不限品类/.test(text);
 }
 
 function parseBudget(text) {
@@ -128,7 +137,11 @@ function parseColor(text) {
 }
 
 function parseMaterial(text) {
-  if (/皮质也可以|可以皮质|材质不限/.test(text)) return {clear: true};
+  if (/皮质也可以|可以皮质|材质不限|排除不限|不限材质|不限排除/.test(text)) return {clear: true};
+  const names = ['皮质', '布艺', '橡木', '松木', '板材', '胡桃木', '岩板'];
+  if (names.some(item => new RegExp('(?:去掉|取消)(?:不要)?' + item).test(text) || new RegExp('不要排除' + item).test(text))) {
+    return {clear: true};
+  }
   const excluded = ['皮质', '布艺', '橡木', '松木'].filter(item => new RegExp('不要' + item).test(text));
   if (excluded.length > 1) return {ambiguous: excluded};
   if (excluded.length === 1) return {value: excluded[0]};
@@ -187,6 +200,52 @@ function constraintsChanged(before, after) {
   return JSON.stringify(before) !== JSON.stringify(after);
 }
 
+const EDITABLE_FIELDS = ['budget_max_cny', 'width_max_cm', 'category', 'color', 'exclude_material'];
+
+export function editConstraint(state, patch, clientRevision) {
+  if (clientRevision != null && clientRevision !== state.revision) {
+    return {ok: false, error: 'revision_conflict', state, searched: false, composed: false};
+  }
+  const field = patch?.field;
+  if (!EDITABLE_FIELDS.includes(field)) {
+    return {ok: false, error: 'unknown_constraint', state, searched: false, composed: false};
+  }
+  const next = structuredClone(state);
+  const before = structuredClone(next.constraints);
+  if (patch.clear) next.constraints[field] = null;
+  else if (patch.value != null && String(patch.value).trim() !== '') {
+    if (field === 'budget_max_cny' || field === 'width_max_cm') {
+      const amount = Number(patch.value);
+      if (!Number.isFinite(amount)) return {ok: false, error: 'bad_constraint_value', state, searched: false, composed: false};
+      next.constraints[field] = amount;
+    } else next.constraints[field] = String(patch.value).trim();
+  } else {
+    return {ok: false, error: 'bad_constraint_value', state, searched: false, composed: false};
+  }
+  const changed = constraintsChanged(before, next.constraints);
+  if (!changed) {
+    return {ok: true, status: 'await_confirm', reply: '条件没有变化。', state: next, searched: false, composed: false};
+  }
+  next.pending_question = null;
+  next.confirmed_product_id = null;
+  next.confirmed_product_version = null;
+  next.card = null;
+  next.candidate_ids = searchProducts(next.constraints);
+  next.revision += 1;
+  if (!next.candidate_ids.length) {
+    next.pending_question = '没有同时满足这些条件的商品。请选择要调整的条件，我不会自行放宽。';
+    return {ok: true, status: 'ask', reply: next.pending_question, state: next, searched: true, composed: false};
+  }
+  return {
+    ok: true,
+    status: 'await_confirm',
+    reply: '条件已更新，正在按新条件重新筛选。请点选要确认的商品。',
+    state: next,
+    searched: true,
+    composed: false
+  };
+}
+
 export function applyTurn(state, text, clientRevision) {
   if (clientRevision != null && clientRevision !== state.revision) {
     return {ok: false, error: 'revision_conflict', state, searched: false, composed: false};
@@ -211,7 +270,9 @@ export function applyTurn(state, text, clientRevision) {
   if (width?.clear) next.constraints.width_max_cm = null;
   else if (width?.value != null) next.constraints.width_max_cm = width.value;
   if (budget != null) next.constraints.budget_max_cny = budget;
+  else if (clearsBudget(text)) next.constraints.budget_max_cny = null;
   if (category) next.constraints.category = category;
+  else if (clearsCategory(text)) next.constraints.category = null;
   if (color?.clear) next.constraints.color = null;
   else if (color?.value) next.constraints.color = color.value;
   if (material?.clear) next.constraints.exclude_material = null;

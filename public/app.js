@@ -46,6 +46,27 @@ function constraintLines(state) {
   ];
 }
 
+function recognizedConstraints(state) {
+  const items = state?.constraints || {};
+  const rows = [];
+  if (items.budget_max_cny != null) rows.push({field: 'budget_max_cny', label: '预算', value: String(items.budget_max_cny), numeric: true});
+  if (items.width_max_cm != null) rows.push({field: 'width_max_cm', label: '宽度', value: String(items.width_max_cm), numeric: true});
+  if (items.category) rows.push({field: 'category', label: '品类', value: String(items.category), numeric: false});
+  if (items.color) rows.push({field: 'color', label: '颜色', value: String(items.color), numeric: false});
+  if (items.exclude_material) rows.push({field: 'exclude_material', label: '排除材质', value: String(items.exclude_material), numeric: false});
+  return rows;
+}
+
+async function editRecognized(field, value, clear) {
+  if (busy) return;
+  busy = true;
+  try {
+    await withPending('正在按新条件筛选…', () => post('/api/constraint', {field, value, clear}));
+  } finally {
+    busy = false;
+  }
+}
+
 function suggestions(state) {
   const question = state?.pending_question || '';
   if (question.includes('宽度')) return ['宽度不超过160厘米', '宽度不超过180厘米'];
@@ -267,10 +288,39 @@ function renderChat() {
   }
   const facts = $('#fact-body');
   facts.replaceChildren();
-  for (const [label, value] of constraintLines(state)) {
-    const line = document.createElement('p');
-    line.className = 'fact';
-    line.textContent = label + '：' + value;
+  const recognized = recognizedConstraints(state);
+  if (!recognized.length) {
+    const empty = document.createElement('p');
+    empty.className = 'fact muted';
+    empty.textContent = '还没有识别出条件。直接说预算、宽度、颜色或材质。';
+    facts.append(empty);
+  }
+  for (const row of recognized) {
+    const line = document.createElement('div');
+    line.className = 'fact-row';
+    const name = document.createElement('span');
+    name.className = 'fact-name';
+    name.textContent = row.label;
+    const input = document.createElement('input');
+    input.value = row.value;
+    input.setAttribute('aria-label', '修改' + row.label);
+    input.inputMode = row.numeric ? 'decimal' : 'text';
+    const save = document.createElement('button');
+    save.type = 'button';
+    save.className = 'chip-btn tap save';
+    save.textContent = '保存';
+    save.disabled = true;
+    input.addEventListener('input', () => {
+      save.disabled = input.value.trim() === row.value;
+    });
+    save.addEventListener('click', () => editRecognized(row.field, input.value.trim(), false));
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'chip-btn tap remove';
+    remove.setAttribute('aria-label', '去掉' + row.label);
+    remove.textContent = '去掉';
+    remove.addEventListener('click', () => editRecognized(row.field, '', true));
+    line.append(name, input, save, remove);
     facts.append(line);
   }
   const thread = $('#thread');

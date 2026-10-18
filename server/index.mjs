@@ -3,7 +3,7 @@ import {readFile} from 'node:fs/promises';
 import {existsSync, readFileSync} from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
-import {applyTurn, confirmProduct, createState, productById, publicCatalog} from './guide.mjs';
+import {applyTurn, confirmProduct, createState, editConstraint, productById, publicCatalog} from './guide.mjs';
 import * as store from './store.mjs';
 import {executeImage} from './image.mjs';
 import {executeLiveCopy, modelStatus} from './model-config.mjs';
@@ -351,6 +351,26 @@ async function handleApi(request, response, url) {
     session.record.image = null;
     persistSession(session);
     send(response, 200, view({ok: true, status: 'reset', reply: '已清空这次选品。记下的内容还在。', state: session.record.state}, session.id));
+    return;
+  }
+  if (request.method === 'POST' && url.pathname === '/api/constraint') {
+    const body = await readJson(request);
+    const session = getSession(body.session_id);
+    if (!session) {
+      send(response, 404, {error: 'session_not_found'});
+      return;
+    }
+    const result = editConstraint(session.record.state, body, body.revision);
+    if (result.ok) {
+      const labels = {budget_max_cny: '预算', width_max_cm: '宽度', category: '品类', color: '颜色', exclude_material: '排除材质'};
+      const label = labels[body.field] || '条件';
+      const note = body.clear ? '去掉' + label : label + '改成' + result.state.constraints[body.field];
+      remember(session.record, {role: 'user', text: note});
+      if (result.reply) remember(session.record, {role: 'assistant', text: result.reply, status: result.status});
+      session.record.state = result.state;
+      persistSession(session);
+    }
+    send(response, result.ok ? 200 : 409, view(result, session.id));
     return;
   }
   if (request.method === 'POST' && (url.pathname === '/api/turn' || url.pathname === '/api/confirm')) {
