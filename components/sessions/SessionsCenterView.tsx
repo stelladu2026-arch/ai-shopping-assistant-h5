@@ -181,7 +181,7 @@ export function SessionsCenterView({ onToast }: SessionsCenterViewProps) {
     <div className="flex min-h-0 flex-1 flex-col pb-2">
       <header className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-border bg-background/95 px-4 py-3 backdrop-blur-sm">
         <div className="min-w-0">
-          <Link href="/" className="text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">
+          <Link href="/home" className="text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">
             首页
           </Link>
           <h1 className="truncate text-[17px] font-semibold leading-tight tracking-tight text-foreground">会话中心</h1>
@@ -224,7 +224,7 @@ export function SessionsCenterView({ onToast }: SessionsCenterViewProps) {
                       title="暂无最近会话"
                       description="从首页「常用提问」或功能入口开始对话后，会话会自动保存到这里。"
                       icon="inbox"
-                      action={{ label: "去首页常用提问", href: "/" }}
+                      action={{ label: "去首页常用提问", href: "/home" }}
                     />
                   ) : (
                     <ul className="space-y-3">
