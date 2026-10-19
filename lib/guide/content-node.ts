@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { executeImage } from "./image";
 import { executeLiveCopy, modelStatus } from "./model";
-import { consumeCall, loadStep, saveStep } from "./db";
+import { consumeCall, loadStep, releaseCall, resetPieceCalls, saveStep } from "./db";
 import { DEGRADE_TEXT, LIMITS, capText, FAILURE_TEXT } from "./limits";
 import { degradeLine, dropUnverifiedModelText, sealFacts } from "./facts";
 
@@ -66,6 +66,7 @@ export async function runContentNode(session, request) {
     copyStyle: request?.momentsInput?.copyStyle || session.record.materialInput?.copyStyle || "warm",
     audience: request?.momentsInput?.audience || session.record.materialInput?.audience || "first_home",
   };
+  if (request?.newPiece) resetPieceCalls(session.id);
   const gate = consumeCall(session.id, "content", LIMITS.content);
   if (!gate.ok) {
     return { ok: true, capped: true, reply: capText("content") };
@@ -76,6 +77,7 @@ export async function runContentNode(session, request) {
     error: null,
   });
   if (request?.forceFail) {
+    releaseCall(session.id, "content");
     saveStep(session.id, "content", {
       status: "failed",
       input: { form, confirmedId, searchedProducts: false },
@@ -85,6 +87,7 @@ export async function runContentNode(session, request) {
     return { ok: false, error: "content_failed" };
   }
   if (!confirmedId || !facts || facts.id !== confirmedId) {
+    releaseCall(session.id, "content");
     saveStep(session.id, "content", {
       status: "failed",
       input: { form, confirmedId, searchedProducts: false },
@@ -133,7 +136,7 @@ export async function runContentNode(session, request) {
     if (wantsImage) {
       let generated;
       try {
-        generated = await executeImage(facts, process.env, fetch, session.id);
+        generated = await executeImage(facts, process.env, fetch, session.id, { withinPiece: true });
       } catch {
         generated = {simulation: false, called: true, url: "", label: "返回里没有图片地址"};
       }
@@ -179,6 +182,8 @@ export async function runContentNode(session, request) {
     };
     if (imageNetwork) result.bodyText = `${result.bodyText}${FAILURE_TEXT.network}`;
     if (imageCapped) result.bodyText = `${result.bodyText}${capText("image")}`;
+    const producedCopy = form.outputKind !== "image_only" && Boolean(String(bodyText || "").trim());
+    if (!producedCopy && !imageUrl) releaseCall(session.id, "content");
     session.record.material = result;
     session.record.materialInput = { ...form, productName: facts.name };
     saveStep(session.id, "content", {
@@ -189,6 +194,7 @@ export async function runContentNode(session, request) {
     });
     return { ok: true, output: result, failure: result.failure };
   } catch (error) {
+    releaseCall(session.id, "content");
     saveStep(session.id, "content", {
       status: "failed",
       input: { form, confirmedId, searchedProducts: false },

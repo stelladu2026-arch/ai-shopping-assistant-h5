@@ -350,6 +350,7 @@ export function ChatPageClient() {
         messages: afterUser.map(toAgentPayload),
         sessionId,
         momentsInput: snap,
+        newPiece: true,
       });
       setMessagesMoments((p) => [
         ...p,
@@ -553,6 +554,7 @@ export function ChatPageClient() {
           messages: afterUser.map(toAgentPayload),
           sessionId,
           momentsInput: snap,
+          newPiece: true,
         });
         setMessagesMoments((p) => [
           ...p,
@@ -624,6 +626,7 @@ export function ChatPageClient() {
             messages: prefix.map(toAgentPayload),
             sessionId,
             momentsInput: snap,
+            newPiece: false,
           });
           setMessagesMoments((p) => {
             const i = p.findIndex((m) => m.id === loadingId);

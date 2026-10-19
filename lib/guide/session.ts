@@ -249,9 +249,13 @@ function graphView(ran) {
   };
 }
 
-export async function guideMaterial(input, sessionId) {
+export async function guideMaterial(input, sessionId, options = {}) {
   const session = sessionFor(sessionId);
-  const ran = await runGuideGraph(session, { intent: "content", momentsInput: input });
+  const ran = await runGuideGraph(session, {
+    intent: "content",
+    momentsInput: input,
+    newPiece: options?.newPiece === true,
+  });
   persist(session, null);
   if (ran.capped) {
     return {
@@ -263,6 +267,7 @@ export async function guideMaterial(input, sessionId) {
       hashtags: [],
       imageSuggestion: "",
       generatedImageUrl: "",
+      imagePlaceholder: ran.reply || "",
       commentThreadScript: "",
       graph: graphView(ran),
     };

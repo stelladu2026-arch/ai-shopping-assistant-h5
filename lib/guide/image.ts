@@ -170,21 +170,40 @@ export function imageRequest(product, env = process.env) {
   };
 }
 
-export async function executeImage(product, env = process.env, fetcher = fetch, sessionId = null) {
+function producedImage(result) {
+  return Boolean(result?.url) && !result.simulation && !result.quota && !result.capped && !result.network;
+}
+
+export async function executeImage(product, env = process.env, fetcher = fetch, sessionId = null, options = {}) {
   const status = imageStatus(env);
   const request = imageRequest(product, env);
   if (!status.ready) return skipped(request);
-  if (sessionId) {
+  const withinPiece = Boolean(options.withinPiece);
+  let charged = false;
+  if (sessionId && !withinPiece) {
     const { consumeCall } = await import("./db");
     const { LIMITS, capText } = await import("./limits");
     const gate = consumeCall(sessionId, "image", LIMITS.image);
     if (!gate.ok) {
       return {simulation: true, called: false, capped: true, pending_human: true, label: capText("image"), request};
     }
+    charged = true;
   }
+  let result;
   try {
-    return await requestImage(request, env, fetcher);
+    result = await requestImage(request, env, fetcher);
   } catch (error) {
-    return failureFromThrow(error, request);
+    result = await failureFromThrow(error, request);
   }
+  const produced = producedImage(result);
+  if (charged && !produced) {
+    const { releaseCall } = await import("./db");
+    releaseCall(sessionId, "image");
+  }
+  if (withinPiece && sessionId && produced) {
+    const { consumeCall } = await import("./db");
+    const { LIMITS } = await import("./limits");
+    consumeCall(sessionId, "image", LIMITS.image);
+  }
+  return result;
 }
