@@ -35,6 +35,8 @@ export interface MomentsGenerationResult {
   imageSuggestion?: string;
   /** 没有配图时，配图区域显示的原因。有图时为空。 */
   imagePlaceholder?: string;
+  /** 这一套图文自己的编号。重新生成只改这一套。 */
+  pieceId?: string;
   /** 图片地址，或 data:image 形式的返回图 */
   generatedImageUrl?: string;
   commentThreadScript?: string;
@@ -187,6 +189,8 @@ export interface AgentChatRequestBody {
   momentsInput?: MomentsGenerationInput;
   /** 生成新图文：这一下是新的一套的第 1 次，不沿用上一套的次数 */
   newPiece?: boolean;
+  /** 重新生成时指明是哪一套。生成新图文不带这个字段。 */
+  pieceId?: string;
   /** 场景二：多模态占位说明（如已选图片文件名） */
   attachmentNote?: string;
 }

@@ -166,14 +166,54 @@ async function check(executeImage) {
     assert.equal(body.n, 1);
     assert.equal(body.response_format, undefined);
     assert.equal(body.image, undefined);
+    assert.equal(body.prompt_extend, true);
     assert.equal(String(body.size).includes("*"), false);
-    assert.deepEqual(Object.keys(body).sort(), ["model", "n", "prompt", "size"]);
+    assert.deepEqual(Object.keys(body).sort(), ["model", "n", "prompt", "prompt_extend", "size"]);
     const raw = JSON.stringify(body);
     assert.equal(raw.includes("/demo/"), false);
     assert.equal(raw.includes("localhost"), false);
     return jsonResponse(200, { data: [{ url: imageUrl }] });
   });
   assert.equal(compat.url, imageUrl);
+
+  const linked = {
+    ...product,
+    prompt: "客厅 http://127.0.0.1:3000/products/a.png 米白布艺 ![配图](/products/S01.png) /demo/sofa.png",
+    image: "/products/S01.png",
+    image_url: "http://127.0.0.1:3000/products/a.png",
+    negative_prompt: "http://127.0.0.1:3000/demo/bad.png",
+    messages: [{ content: [{ image: "http://127.0.0.1:3000/products/a.png" }] }],
+  };
+  const stripped = await executeImage(linked, {
+    ...ready,
+    IMAGE_API_BASE: "https://dashscope.aliyuncs.com/compatible-mode/v1/images/generations",
+    IMAGE_MODEL: "qwen-image-plus",
+  }, async (url, init) => {
+    assert.equal(String(url), "https://dashscope.aliyuncs.com/compatible-mode/v1/images/generations");
+    const body = JSON.parse(String(init.body));
+    const raw = JSON.stringify(body);
+    assert.equal(body.size, "1024x1024");
+    assert.equal(body.n, 1);
+    assert.equal(body.prompt_extend, true);
+    assert.equal(body.response_format, undefined);
+    assert.equal(body.image, undefined);
+    assert.equal(body.image_url, undefined);
+    assert.equal(body.negative_prompt, undefined);
+    assert.equal(body.messages, undefined);
+    assert.equal(body.input, undefined);
+    assert.equal(raw.includes("http://127.0.0.1:3000/products/a.png"), false);
+    assert.equal(raw.includes("127.0.0.1"), false);
+    assert.equal(raw.includes("http://"), false);
+    assert.equal(raw.includes("https://"), false);
+    assert.equal(raw.includes("/products/"), false);
+    assert.equal(raw.includes("/demo/"), false);
+    assert.equal(body.prompt.includes("客厅"), true);
+    assert.equal(body.prompt.includes("米白布艺"), true);
+    assert.equal(body.prompt.includes("云朵双人沙发"), true);
+    assert.deepEqual(Object.keys(body).sort(), ["model", "n", "prompt", "prompt_extend", "size"]);
+    return jsonResponse(200, { data: [{ url: imageUrl }] });
+  });
+  assert.equal(stripped.url, imageUrl);
 
   const compatBase = await executeImage(product, {
     ...ready,
@@ -182,7 +222,9 @@ async function check(executeImage) {
   }, async (url, init) => {
     assert.equal(String(url), "https://dashscope.aliyuncs.com/compatible-mode/v1/images/generations");
     const body = JSON.parse(String(init.body));
-    assert.deepEqual(Object.keys(body).sort(), ["model", "n", "prompt", "size"]);
+    assert.equal(body.prompt_extend, true);
+    assert.equal(body.size, "1024x1024");
+    assert.deepEqual(Object.keys(body).sort(), ["model", "n", "prompt", "prompt_extend", "size"]);
     return jsonResponse(200, { data: [{ url: imageUrl }] });
   });
   assert.equal(compatBase.url, imageUrl);
@@ -256,7 +298,9 @@ async function check(executeImage) {
     assert.equal(String(url).includes("chat/completions"), false);
     assert.equal(String(url), "https://dashscope.aliyuncs.com/compatible-mode/v1/images/generations");
     const body = JSON.parse(String(init.body));
-    assert.deepEqual(Object.keys(body).sort(), ["model", "n", "prompt", "size"]);
+    assert.equal(body.prompt_extend, true);
+    assert.equal(body.size, "1024x1024");
+    assert.deepEqual(Object.keys(body).sort(), ["model", "n", "prompt", "prompt_extend", "size"]);
     return jsonResponse(200, { data: [{ url: imageUrl }] });
   });
   assert.equal(chatBase.url, imageUrl);
@@ -381,7 +425,9 @@ async function testQwenImageCompatibleMode(executeImage) {
       assert.equal(String(body.size).includes("*"), false, doc);
       assert.equal(body.image, undefined, doc);
       assert.equal(body.input, undefined, doc);
-      assert.deepEqual(Object.keys(body).sort(), ["model", "n", "prompt", "size"], doc);
+      assert.equal(body.prompt_extend, true, doc);
+      assert.equal(body.response_format, undefined, doc);
+      assert.deepEqual(Object.keys(body).sort(), ["model", "n", "prompt", "prompt_extend", "size"], doc);
       return jsonResponse(200, { data: [{ url: imageUrl }] });
     });
   }

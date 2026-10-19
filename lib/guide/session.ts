@@ -255,6 +255,7 @@ export async function guideMaterial(input, sessionId, options = {}) {
     intent: "content",
     momentsInput: input,
     newPiece: options?.newPiece === true,
+    pieceId: options?.pieceId || "",
   });
   persist(session, null);
   if (ran.capped) {

@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { guideAct, guideMaterial } from "../lib/guide/session.ts";
 import { executeImage } from "../lib/guide/image.ts";
-import { consumeCall, readCallCounts } from "../lib/guide/db.ts";
+import { consumeCall, loadSession, readCallCounts } from "../lib/guide/db.ts";
+import { appendMomentsPiece } from "../lib/chat/momentsPiece.ts";
 import { LIMITS } from "../lib/guide/limits.ts";
 
 const catalogPath = new URL("../data/catalog.json", import.meta.url);
@@ -80,6 +81,7 @@ try {
   assert.match(page, /newPiece: true/);
   assert.match(page, /newPiece: false/);
   assert.match(page, /startNewPiece\(previous\?\.momentsSnapshot \?\? momentsForm\)/);
+  assert.match(page, /appendMomentsPiece\(/);
 
   globalThis.fetch = async () => {
     throw new Error("ready should not fetch");
@@ -151,6 +153,41 @@ try {
   assertGenerated(restarted, "new piece after previous piece");
   assert.equal(counts(pieceId).content, 1);
   assert.equal(counts(pieceId).image, 1);
+  assert.equal(String(restarted.bodyText || "").includes("这次接待最多"), false);
+
+  const keepId = "new_copy_keep_previous";
+  await ready(keepId);
+  globalThis.fetch = async () => imageResponse(200, { data: [{ url: "https://img.example.test/first-piece.png" }] });
+  const kept = await guideMaterial(momentsInput, keepId, { newPiece: true });
+  assert.equal(kept.generatedImageUrl, "https://img.example.test/first-piece.png");
+  globalThis.fetch = async () => imageResponse(400, {
+    message: "url error, please check url！ For details, see: https://www.alibabacloud.com/help",
+  });
+  const added = await guideMaterial(momentsInput, keepId, { newPiece: true });
+  assert.match(added.imagePlaceholder, /url error/);
+  assert.equal(added.cardTitle.includes("已达本次上限"), false);
+  assert.equal(String(added.bodyText || "").includes("这次接待最多"), false);
+  assert.equal(String(added.imagePlaceholder || "").includes("这次接待最多"), false);
+  const record = loadSession(keepId);
+  assert.equal(record.materials.length, 2);
+  assert.equal(record.materials[0].generatedImageUrl, "https://img.example.test/first-piece.png");
+  assert.equal(record.materials[0].imagePlaceholder || "", "");
+  assert.match(record.materials[1].imagePlaceholder, /url error/);
+  assert.notEqual(record.materials[0].pieceId, record.materials[1].pieceId);
+  const shown = appendMomentsPiece([{
+    id: "card-1",
+    role: "assistant",
+    structured: kept,
+  }], {
+    id: "card-1",
+    role: "assistant",
+    structured: added,
+  });
+  assert.equal(shown.length, 2);
+  assert.equal(shown[0].structured.generatedImageUrl, "https://img.example.test/first-piece.png");
+  assert.equal(shown[0].structured.imagePlaceholder || "", "");
+  assert.match(shown[1].structured.imagePlaceholder, /url error/);
+  assert.notEqual(shown[1].id, shown[0].id);
 
   console.log("visible-first", JSON.stringify({
     cardTitle: restarted.cardTitle,

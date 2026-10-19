@@ -11,10 +11,12 @@ export async function POST(req: Request) {
     text?: string;
     momentsInput?: MomentsGenerationInput;
     newPiece?: boolean;
+    pieceId?: string;
   };
   if (partial.scene === "moments_marketing" && partial.momentsInput) {
     const structured = await guideMaterial(partial.momentsInput, partial.sessionId || partial.customerId, {
       newPiece: partial.newPiece === true,
+      pieceId: typeof partial.pieceId === "string" ? partial.pieceId : "",
     });
     const failed = structured.cardTitle === "素材没有生成";
     const capped = structured.cardTitle === "已达本次上限";
