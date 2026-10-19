@@ -527,7 +527,9 @@ function renderChat() {
     shot.className = 'draft';
     shot.id = 'image-card';
     const title = document.createElement('h2');
-    title.textContent = active.image.label || '演示回放、待核对';
+    title.textContent = active.image.url
+      ? (active.image.label || '待核对')
+      : (active.image.label || (active.image.called ? '返回里没有图片地址' : '没有调用生图接口'));
     const note = document.createElement('p');
     note.className = 'muted';
     if (active.image.url) {
@@ -540,10 +542,12 @@ function renderChat() {
     } else {
       const box = document.createElement('div');
       box.className = 'placeholder';
-      box.textContent = '演示回放、待核对';
+      box.textContent = active.image.called
+        ? (active.image.label || '返回里没有图片地址')
+        : (active.image.label || '没有调用生图接口');
       shot.append(title, box);
       note.textContent = active.image.called
-        ? '接口没有返回可用图片地址，仍待核对。密钥不会出现在页面上。'
+        ? '密钥不会出现在页面上。'
         : '没有调用生图接口。请求体已留好：模型、提示词、尺寸和张数，密钥不出现在页面上。';
     }
     shot.append(note);

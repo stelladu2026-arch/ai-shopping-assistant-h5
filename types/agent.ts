@@ -33,7 +33,9 @@ export interface MomentsGenerationResult {
   hashtags: string[];
   /** 配图说明或拍摄指引；仅文案时可为空 */
   imageSuggestion?: string;
-  /** Coze 绘画插件返回的图片 URL，Mock 阶段可空 */
+  /** 没有配图时，配图区域显示的原因。有图时为空。 */
+  imagePlaceholder?: string;
+  /** 图片地址，或 data:image 形式的返回图 */
   generatedImageUrl?: string;
   commentThreadScript?: string;
 }
@@ -145,7 +147,7 @@ export interface GuideTurnBlock {
     use: { id: string; discount_cny: number }[];
     excluded: { id: string; reason: string }[];
   } | null;
-  image: { label: string; called: boolean } | null;
+  image: { label: string; called: boolean; url?: string } | null;
   reflection: {
     pending_review: boolean;
     note: string;
@@ -208,7 +210,8 @@ export function stringifyStructuredBlock(s: AgentStructuredBlock): string {
     if (s.hashtags.length)
       lines.push(`话题：${s.hashtags.map((h) => (h.startsWith("#") ? h : `#${h}`)).join(" ")}`);
     if (s.imageSuggestion?.trim()) lines.push(`配图建议：${s.imageSuggestion}`);
-    if (s.generatedImageUrl) lines.push(`配图地址：${s.generatedImageUrl}`);
+    if (s.generatedImageUrl && !s.generatedImageUrl.startsWith("data:")) lines.push(`配图地址：${s.generatedImageUrl}`);
+    else if (!s.generatedImageUrl && s.imagePlaceholder?.trim()) lines.push(`配图：${s.imagePlaceholder}`);
     if (s.commentThreadScript?.trim()) lines.push(`评论区话术：${s.commentThreadScript}`);
     return lines.join("\n");
   }

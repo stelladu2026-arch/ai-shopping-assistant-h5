@@ -175,7 +175,7 @@ function snapshot(session, memory) {
     promoPlan: facts?.promoPlan || null,
     image:
       session.record.image && session.record.image.product_id === state.confirmed_product_id
-        ? { label: session.record.image.label, called: session.record.image.called }
+        ? { label: session.record.image.label, called: session.record.image.called, url: session.record.image.url || "" }
         : null,
     reflection,
     process: steps.route
@@ -353,11 +353,12 @@ export async function guideAct(body) {
       pending_human: true,
       label: generated.label,
       product_id: product.id,
+      url: generated.url || "",
       request: generated.request,
     };
     result = {
       ok: true,
-      leadText: generated.capped ? generated.label : generated.network ? FAILURE_TEXT.network : generated.simulation ? "配图仍是演示回放、待核对。" : "配图已请求，结果仍待核对。",
+      leadText: generated.capped ? generated.label : generated.network ? FAILURE_TEXT.network : generated.url ? "配图已返回，仍待核对。" : (generated.label || "没有调用生图接口。"),
       structured: snapshot(session, memory),
     };
   } else if (action === "confirm") {

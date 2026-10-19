@@ -129,22 +129,26 @@ export async function runContentNode(session, request) {
     let imageCapped = false;
     let imageNetwork = false;
     let imageUrl = "";
+    let imagePlaceholder = "";
     if (wantsImage) {
       let generated;
       try {
         generated = await executeImage(facts, process.env, fetch, session.id);
       } catch {
-        generated = {simulation: true, called: false, quota: true, url: "", label: "演示回放、待核对"};
+        generated = {simulation: false, called: true, url: "", label: "返回里没有图片地址"};
       }
       imageCapped = Boolean(generated.capped);
       imageNetwork = Boolean(generated.network) && !generated.quota;
       imageUrl = generated?.url && !generated.simulation && !generated.quota && !generated.capped && !generated.network
         ? String(generated.url)
         : "";
+      imagePlaceholder = imageUrl
+        ? ""
+        : String(generated.label || (generated.called ? "返回里没有图片地址" : "没有调用生图接口"));
       session.record.image = {
         simulation: !imageUrl,
         called: Boolean(generated.called),
-        label: imageUrl ? (generated.label || "待核对") : "演示回放、待核对",
+        label: imageUrl ? (generated.label || "待核对") : imagePlaceholder,
         product_id: facts.id,
         request: generated.request || null,
         url: imageUrl,
@@ -165,6 +169,7 @@ export async function runContentNode(session, request) {
       hashtags: [],
       imageSuggestion: "",
       generatedImageUrl: imageUrl,
+      imagePlaceholder,
       commentThreadScript: "",
       pendingReview: false,
       usedProductId: facts.id,

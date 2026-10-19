@@ -19,9 +19,16 @@ function loadEnvFile() {
   const file = path.join(root, '.env');
   if (!existsSync(file)) return;
   for (const line of readFileSync(file, 'utf8').split(/\r?\n/)) {
-    const matched = line.match(/^([A-Z0-9_]+)=(.*)$/);
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const matched = trimmed.match(/^(?:export\s+)?([A-Z0-9_]+)\s*=\s*(.*)$/);
     if (!matched || process.env[matched[1]] != null) continue;
-    process.env[matched[1]] = matched[2].trim();
+    let value = matched[2].trim();
+    if (value.length >= 2) {
+      const quote = value[0];
+      if ((quote === '"' || quote === "'") && value[value.length - 1] === quote) value = value.slice(1, -1);
+    }
+    process.env[matched[1]] = value;
   }
 }
 
@@ -302,7 +309,10 @@ async function handleApi(request, response, url) {
       url: generated.url || '',
       request: generated.request
     };
-    remember(session.record, {role: 'assistant', text: generated.simulation ? '配图仍是演示回放，待核对，没有调用生图接口。' : '配图已请求，结果仍待核对。'});
+    const imageText = generated.url
+      ? '配图已返回，仍待核对。'
+      : (generated.label || (generated.called ? '返回里没有图片地址' : '没有调用生图接口。'));
+    remember(session.record, {role: 'assistant', text: imageText});
     persistSession(session);
     send(response, 200, view({ok: true, status: 'image', reply: session.record.messages.at(-1).text, state: session.record.state}, session.id));
     return;
