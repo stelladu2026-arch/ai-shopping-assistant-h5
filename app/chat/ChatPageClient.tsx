@@ -23,7 +23,7 @@ import {
   removeRagQueryHistoryItem,
 } from "@/lib/ragQueryHistory";
 import { clearAllAppLocalStorage } from "@/lib/appLocalStorage";
-import { appendMomentsPiece } from "@/lib/chat/momentsPiece";
+import { appendMomentsPiece, BLANK_COPY_STATUS, clearCopyReview, isGeneratedMomentsPiece, resetToBlankCopyCard } from "@/lib/chat/momentsPiece";
 import {
   agentChatRequest,
   CHAT_FAIL_MSG,
@@ -277,6 +277,11 @@ export function ChatPageClient() {
     [momentsForm.outputKind],
   );
 
+  const showingBlankCopyCard = useMemo(
+    () => messagesMoments.some((item) => item.momentsChoice === "pending"),
+    [messagesMoments],
+  );
+
   const onToggleFavorite = useCallback(
     (message: ChatMessage) => {
       if (!sessionId) return;
@@ -336,17 +341,24 @@ export function ChatPageClient() {
     }
   }, [sending, sessionId, guideTurn, loadGuide]);
 
+  const openBlankCopyCard = useCallback(() => {
+    if (sending) return;
+    setMomentsSetupSheetOpen(false);
+    setMessagesMoments((current) => resetToBlankCopyCard(current, momentsForm, id("choice")));
+    setGuideTurn((current) => clearCopyReview(current));
+  }, [sending, momentsForm]);
+
   const handleContinueMomentsSetup = useCallback(() => {
-    const assistantId = lastMomentsAssistantId;
-    const prev = messagesMomentsRef.current;
-    const idx = assistantId ? prev.findIndex((item) => item.id === assistantId) : -1;
-    const previous = idx > 0 ? prev[idx - 1] : undefined;
-    void startNewPiece(previous?.momentsSnapshot ?? momentsForm);
-  }, [lastMomentsAssistantId, momentsForm, startNewPiece]);
+    openBlankCopyCard();
+  }, [openBlankCopyCard]);
 
   const generateMoments = useCallback(() => {
+    if (messagesMomentsRef.current.some((item) => isGeneratedMomentsPiece(item))) {
+      openBlankCopyCard();
+      return;
+    }
     void startNewPiece(momentsForm);
-  }, [momentsForm, startNewPiece]);
+  }, [momentsForm, openBlankCopyCard, startNewPiece]);
 
   const sendMomentsFollowUp = useCallback(async () => {
     const text = momentsFollowUpDraft.trim();
@@ -820,12 +832,12 @@ export function ChatPageClient() {
             className="min-h-0 flex-1 animate-in fade-in space-y-1 overflow-y-auto overscroll-contain px-0 pb-4 pt-2 duration-200 tech-scroll [scrollbar-gutter:stable_both-edges]"
             aria-busy={sending}
           >
-            {sessionHydrated && sceneMode === "moments_marketing" && guideTurn?.material?.pendingReview ? (
+            {sessionHydrated && sceneMode === "moments_marketing" && guideTurn?.material?.pendingReview && !showingBlankCopyCard ? (
               <p className="mx-3 mb-2 rounded-xl bg-orange-50 px-3 py-3 text-[0.84rem] font-semibold leading-relaxed text-orange-900">
                 待核对。{guideTurn.material.reviewNote || "上一套文案和配图还不能直接用。下一步：点重新生成素材。"}
               </p>
             ) : null}
-            {sessionHydrated && sceneMode === "moments_marketing" && !momentsSetupSheetOpen ? (
+            {sessionHydrated && sceneMode === "moments_marketing" && !momentsSetupSheetOpen && !showingBlankCopyCard ? (
               <div className="shrink-0 px-0">
                 <MomentsInputPanel
                   variant="inline"
@@ -859,6 +871,7 @@ export function ChatPageClient() {
                         onChange={(next) => updateInlineMoments(m.id, next)}
                         onGenerate={() => void generateFromInlineMoments(m.id)}
                         generateDisabled={sending || !guideTurn?.confirmedFacts}
+                        choiceStatus={m.momentsChoice === "pending" ? BLANK_COPY_STATUS : null}
                       />
                     </div>
                   );

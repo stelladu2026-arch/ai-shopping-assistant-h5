@@ -18,8 +18,10 @@ export interface ChatMessage {
   contentFeedback?: ContentFeedbackVote | null;
   /** 用户消息（朋友圈）：请求参数快照 */
   momentsSnapshot?: MomentsGenerationInput;
-  /** 对话内嵌：与顶部相同的参数卡片（点击「生成新图文」时插入） */
+  /** 对话内嵌：与顶部相同的参数卡片（点击「生成新图文」后替换成这一张） */
   momentsInlineEditor?: boolean;
+  /** pending：空白待选择，还没有标题、正文和配图 */
+  momentsChoice?: "pending";
   /** 用户消息（政策）：重新生成时复用问题原文 */
   ragQuery?: string;
   /** 用户消息（政策）：当时上传的凭证文件名 */

@@ -138,11 +138,11 @@ export function AssistantBubble({
                 {favorited ? "已收藏这套素材" : "收藏这套素材"}
               </button>
             ) : null}
-            {onRegenerate ? (
+            {onContinueGenerate || onRegenerate ? (
               <button
                 type="button"
                 disabled={actionsDisabled}
-                onClick={onRegenerate}
+                onClick={onContinueGenerate ?? onRegenerate}
                 className="mt-2 min-h-11 w-full rounded-xl border border-slate-200 bg-white text-[0.85rem] font-bold text-slate-800"
               >
                 重新生成素材
