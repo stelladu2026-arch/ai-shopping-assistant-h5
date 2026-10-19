@@ -27,12 +27,22 @@ function imageSize(model, kind) {
   return '1024x1024'.replace(/x/gi, '*');
 }
 
+function stripImageRefs(text) {
+  let value = String(text || '');
+  value = value.replace(/!\[[^\]]*\]\([^)]*\)/g, ' ');
+  value = value.replace(/https?:\/\/[^\s)\]>"']+/gi, ' ');
+  value = value.replace(/\/(?:products|demo)\/[^\s)\]>"']+/gi, ' ');
+  return value.replace(/\s+/g, ' ').trim();
+}
+
 function furniturePrompt(product) {
-  const name = product?.name || '';
-  const color = product?.color || '';
-  const material = product?.material || '';
-  const model = product?.model || '';
-  return `家具示意。保持资料中的名称、颜色和材质，不要改成另一种商品。${name}，${color}${material}，型号${model}。`;
+  const name = stripImageRefs(product?.name || '');
+  const color = stripImageRefs(product?.color || '');
+  const material = stripImageRefs(product?.material || '');
+  const model = stripImageRefs(product?.model || '');
+  const extra = stripImageRefs(product?.prompt || '');
+  const sentence = `家具示意。保持资料中的名称、颜色和材质，不要改成另一种商品。${name}，${color}${material}，型号${model}。`;
+  return stripImageRefs(extra ? `${sentence}${extra}` : sentence);
 }
 
 function dashscopeHost(hostname) {
@@ -94,7 +104,27 @@ function imageBody(product, model, kind) {
     return {model, input: {messages: [{role: 'user', content: [{text: prompt}]}]}, parameters: {size, n: 1, watermark: false}};
   }
   if (kind === 'async') return {model, input: {prompt}, parameters: {size, n: 1}};
+  if (kind === 'compatible') return {model, prompt, size, n: 1, prompt_extend: true};
   return {model, prompt, size, n: 1};
+}
+
+function outgoingBody(request) {
+  const kind = request?.kind;
+  const source = request?.body || {};
+  const nested = source.input?.messages?.[0]?.content?.[0]?.text;
+  const prompt = stripImageRefs(source.prompt || source.input?.prompt || nested || '');
+  if (kind === 'multimodal') {
+    return {
+      model: source.model,
+      input: {messages: [{role: 'user', content: [{text: prompt}]}]},
+      parameters: {size: source.parameters?.size, n: 1, watermark: false},
+    };
+  }
+  if (kind === 'async') {
+    return {model: source.model, input: {prompt}, parameters: {size: source.parameters?.size, n: 1}};
+  }
+  if (kind === 'compatible') return {model: source.model, prompt, size: '1024x1024', n: 1, prompt_extend: true};
+  return {model: source.model, prompt, size: source.size, n: 1};
 }
 
 function taskEndpoint(endpoint, taskId) {
@@ -335,6 +365,7 @@ async function requestImage(request, env, fetcher) {
   const key = cleanEnv(env.IMAGE_API_KEY);
   const headers = {'Content-Type': 'application/json', Authorization: 'Bearer ' + key};
   if (request.native) headers['X-DashScope-Async'] = 'enable';
+  request.body = outgoingBody(request);
   const response = await fetcher(request.url, {
     method: 'POST',
     redirect: 'manual',
@@ -364,6 +395,7 @@ export function imageRequest(product, env = process.env) {
     method: 'POST',
     url: endpoint.url,
     native: endpoint.native,
+    kind: endpoint.kind,
     body: imageBody(product, model, endpoint.kind),
   };
 }

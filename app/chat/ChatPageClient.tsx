@@ -23,6 +23,7 @@ import {
   removeRagQueryHistoryItem,
 } from "@/lib/ragQueryHistory";
 import { clearAllAppLocalStorage } from "@/lib/appLocalStorage";
+import { appendMomentsPiece } from "@/lib/chat/momentsPiece";
 import {
   agentChatRequest,
   CHAT_FAIL_MSG,
@@ -317,24 +318,18 @@ export function ChatPageClient() {
         momentsInput: nextSnap,
         newPiece: true,
       });
-      setMessagesMoments((p) => [
-        ...p,
-        {
-          id: payload.messageId || id("a"),
-          role: "assistant",
-          leadText: payload.leadText,
-          structured: payload.structured,
-        },
-      ]);
+      setMessagesMoments((current) => appendMomentsPiece(current, {
+        id: payload.messageId || id("a"),
+        role: "assistant",
+        leadText: payload.leadText,
+        structured: payload.structured,
+      }));
     } catch {
-      setMessagesMoments((p) => [
-        ...p,
-        {
-          id: id("a"),
-          role: "assistant",
-          leadText: CHAT_FAIL_MSG,
-        },
-      ]);
+      setMessagesMoments((current) => appendMomentsPiece(current, {
+        id: id("a"),
+        role: "assistant",
+        leadText: CHAT_FAIL_MSG,
+      }));
     } finally {
       setSending(false);
       if (sessionId) void loadGuide(sessionId);
@@ -533,24 +528,18 @@ export function ChatPageClient() {
           momentsInput: snap,
           newPiece: true,
         });
-        setMessagesMoments((p) => [
-          ...p,
-          {
-            id: payload.messageId || id("a"),
-            role: "assistant",
-            leadText: payload.leadText,
-            structured: payload.structured,
-          },
-        ]);
+        setMessagesMoments((current) => appendMomentsPiece(current, {
+          id: payload.messageId || id("a"),
+          role: "assistant",
+          leadText: payload.leadText,
+          structured: payload.structured,
+        }));
       } catch {
-        setMessagesMoments((p) => [
-          ...p,
-          {
-            id: id("a"),
-            role: "assistant",
-            leadText: CHAT_FAIL_MSG,
-          },
-        ]);
+        setMessagesMoments((current) => appendMomentsPiece(current, {
+          id: id("a"),
+          role: "assistant",
+          leadText: CHAT_FAIL_MSG,
+        }));
       } finally {
         setSending(false);
       }
@@ -604,6 +593,7 @@ export function ChatPageClient() {
             sessionId,
             momentsInput: snap,
             newPiece: false,
+            pieceId: assistant.structured.scene === "moments_marketing" ? assistant.structured.pieceId || "" : "",
           });
           setMessagesMoments((p) => {
             const i = p.findIndex((m) => m.id === loadingId);

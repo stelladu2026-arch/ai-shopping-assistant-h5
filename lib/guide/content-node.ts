@@ -53,6 +53,29 @@ async function acceptedLiveCopy(facts, sealed, refused) {
   }
 }
 
+function rememberMaterial(session, result, request) {
+  if (!Array.isArray(session.record.materials)) {
+    session.record.materials = session.record.material ? [session.record.material] : [];
+  }
+  const pieces = session.record.materials;
+  if (request?.newPiece) {
+    result.pieceId = `piece_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+    pieces.push(result);
+  } else if (request?.pieceId) {
+    result.pieceId = String(request.pieceId);
+    const index = pieces.findIndex((item) => item && item.pieceId === result.pieceId);
+    if (index >= 0) pieces[index] = result;
+    else pieces.push(result);
+  } else if (pieces.length) {
+    result.pieceId = pieces[pieces.length - 1].pieceId || `piece_${Date.now().toString(36)}`;
+    pieces[pieces.length - 1] = result;
+  } else {
+    result.pieceId = `piece_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+    pieces.push(result);
+  }
+  session.record.material = result;
+}
+
 function customerSentence(facts, sealed) {
   const bits = [String(facts.name || "").trim()];
   const look = `${sealed.facts.color || ""}${sealed.facts.material || ""}`;
@@ -180,7 +203,7 @@ export async function runContentNode(session, request) {
     if (imageCapped) result.bodyText = `${result.bodyText}${capText("image")}`;
     const producedCopy = form.outputKind !== "image_only" && Boolean(String(bodyText || "").trim());
     if (!producedCopy && !imageUrl) releaseCall(session.id, "content");
-    session.record.material = result;
+    rememberMaterial(session, result, request);
     session.record.materialInput = { ...form, productName: facts.name };
     saveStep(session.id, "content", {
       status: "completed",
