@@ -202,25 +202,31 @@ function constraintsChanged(before, after) {
 
 const EDITABLE_FIELDS = ['budget_max_cny', 'width_max_cm', 'category', 'color', 'exclude_material'];
 
+function writeConstraint(next, change) {
+  const field = change?.field;
+  if (!EDITABLE_FIELDS.includes(field)) return 'unknown_constraint';
+  if (change.clear) next.constraints[field] = null;
+  else if (change.value != null && String(change.value).trim() !== '') {
+    if (field === 'budget_max_cny' || field === 'width_max_cm') {
+      const amount = Number(change.value);
+      if (!Number.isFinite(amount)) return 'bad_constraint_value';
+      next.constraints[field] = amount;
+    } else next.constraints[field] = String(change.value).trim();
+  } else return 'bad_constraint_value';
+  return '';
+}
+
 export function editConstraint(state, patch, clientRevision) {
   if (clientRevision != null && clientRevision !== state.revision) {
     return {ok: false, error: 'revision_conflict', state, searched: false, composed: false};
   }
-  const field = patch?.field;
-  if (!EDITABLE_FIELDS.includes(field)) {
-    return {ok: false, error: 'unknown_constraint', state, searched: false, composed: false};
-  }
+  const changes = Array.isArray(patch?.changes) ? patch.changes : [patch];
+  if (!changes.length) return {ok: false, error: 'bad_constraint_value', state, searched: false, composed: false};
   const next = structuredClone(state);
   const before = structuredClone(next.constraints);
-  if (patch.clear) next.constraints[field] = null;
-  else if (patch.value != null && String(patch.value).trim() !== '') {
-    if (field === 'budget_max_cny' || field === 'width_max_cm') {
-      const amount = Number(patch.value);
-      if (!Number.isFinite(amount)) return {ok: false, error: 'bad_constraint_value', state, searched: false, composed: false};
-      next.constraints[field] = amount;
-    } else next.constraints[field] = String(patch.value).trim();
-  } else {
-    return {ok: false, error: 'bad_constraint_value', state, searched: false, composed: false};
+  for (const change of changes) {
+    const error = writeConstraint(next, change);
+    if (error) return {ok: false, error, state, searched: false, composed: false};
   }
   const changed = constraintsChanged(before, next.constraints);
   if (!changed) {

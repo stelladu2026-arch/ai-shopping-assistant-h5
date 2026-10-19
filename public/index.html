@@ -69,10 +69,9 @@
       </div>
       <button type="button" class="text-btn tap customer-name" id="rename-current">改成客户名</button>
       <div id="progress" class="progress"></div>
-      <details class="facts" open>
-        <summary>识别出的条件</summary>
+      <div id="facts" class="facts" hidden>
         <div id="fact-body"></div>
-      </details>
+      </div>
       <main id="thread" class="thread"></main>
       <div id="suggest" class="suggest"></div>
       <form id="composer" class="composer">
@@ -117,6 +116,18 @@
         </div>
       </div>
     </form>
+    <div id="constraint-dialog" class="constraint-dialog" hidden>
+      <div class="constraint-backdrop" id="constraint-backdrop"></div>
+      <div class="constraint-panel" id="constraint-panel" role="dialog" aria-modal="true" aria-labelledby="constraint-dialog-title" tabindex="-1">
+        <h2 id="constraint-dialog-title">识别出的条件</h2>
+        <div id="constraint-fields"></div>
+        <p id="constraint-error" class="constraint-error" hidden></p>
+        <div class="constraint-actions">
+          <button type="button" class="text-btn tap" id="constraint-cancel">取消</button>
+          <button type="button" class="send tap" id="constraint-save">保存</button>
+        </div>
+      </div>
+    </div>
     <nav class="tabbar" id="tabbar">
       <button type="button" class="tab tap" data-screen="home" aria-current="page">首页</button>
       <button type="button" class="tab tap" data-screen="sessions">会话中心</button>

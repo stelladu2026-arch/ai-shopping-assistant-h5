@@ -61,23 +61,109 @@ function recognizedConstraints(state) {
   return rows;
 }
 
-function fitConstraintInput(input) {
-  const numeric = input.inputMode === 'decimal';
-  const text = input.value.length ? input.value : numeric ? '0000' : '字';
-  let units = 0;
-  for (const char of text) units += char.charCodeAt(0) > 255 ? 2 : 1;
-  const chars = Math.min(12, Math.max(numeric ? 4 : 2, units));
-  input.style.width = `calc(${chars}ch + 1rem)`;
+let constraintDrafts = [];
+
+function closeConstraintDialog() {
+  const dialog = $('#constraint-dialog');
+  if (dialog) dialog.hidden = true;
+  constraintDrafts = [];
+  const fields = $('#constraint-fields');
+  if (fields) fields.replaceChildren();
+  const error = $('#constraint-error');
+  if (error) {
+    error.hidden = true;
+    error.textContent = '';
+  }
 }
 
-async function editRecognized(field, value, clear) {
-  if (busy) return;
+function renderConstraintDialog() {
+  const box = $('#constraint-fields');
+  box.replaceChildren();
+  constraintDrafts.forEach((row, index) => {
+    const line = document.createElement('div');
+    line.className = 'constraint-field' + (row.removed ? ' is-removed' : '');
+    line.dataset.constraint = row.field;
+    const name = document.createElement('label');
+    name.htmlFor = 'edit-' + row.field;
+    name.textContent = row.name;
+    const input = document.createElement('input');
+    input.id = 'edit-' + row.field;
+    input.value = row.value;
+    input.disabled = row.removed;
+    input.setAttribute('aria-label', row.name);
+    input.addEventListener('input', () => {
+      row.value = input.value;
+    });
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'text-btn tap';
+    remove.textContent = row.removed ? '撤销' : '去掉';
+    remove.setAttribute('aria-label', (row.removed ? '撤销' : '去掉') + row.name);
+    remove.addEventListener('click', () => {
+      row.removed = !row.removed;
+      renderConstraintDialog();
+      const next = document.getElementById('edit-' + row.field);
+      (next || $('#constraint-panel')).focus();
+    });
+    line.append(name, input);
+    if (row.relaxable) {
+      const quiet = document.createElement('span');
+      quiet.className = 'fact-relax';
+      quiet.textContent = '可放宽';
+      line.append(quiet);
+    }
+    line.append(remove);
+    box.append(line);
+    if (index === 0 && !row.removed) input.dataset.first = '1';
+  });
+}
+
+function openConstraintDialog() {
+  const rows = recognizedConstraints(active?.state);
+  if (!rows.length) return;
+  constraintDrafts = rows.map(row => ({...row, original: row.value, removed: false}));
+  const error = $('#constraint-error');
+  error.hidden = true;
+  error.textContent = '';
+  renderConstraintDialog();
+  $('#constraint-dialog').hidden = false;
+  $('#constraint-panel').focus();
+}
+
+async function editRecognized(changes) {
+  if (busy || !changes.length) return;
   busy = true;
   try {
-    await withPending('正在按新条件筛选…', () => post('/api/constraint', {field, value, clear}));
+    await withPending('正在按新条件筛选…', () => post('/api/constraint', {changes}));
   } finally {
     busy = false;
   }
+}
+
+async function saveConstraintDialog() {
+  if (busy) return;
+  const error = $('#constraint-error');
+  const changes = [];
+  for (const row of constraintDrafts) {
+    if (row.removed) {
+      changes.push({field: row.field, clear: true});
+      continue;
+    }
+    const value = row.value.trim();
+    if (!value) {
+      error.hidden = false;
+      error.textContent = '请填写每一项，或点去掉。';
+      return;
+    }
+    if (row.numeric && !Number.isFinite(Number(value))) {
+      error.hidden = false;
+      error.textContent = '预算和尺寸请填数字。';
+      return;
+    }
+    if (value !== row.original) changes.push({field: row.field, value});
+  }
+  closeConstraintDialog();
+  await editRecognized(changes);
 }
 
 function suggestions(state) {
@@ -300,53 +386,22 @@ function renderChat() {
     progress.append(node);
   }
   const facts = $('#fact-body');
+  const factsWrap = $('#facts');
   facts.replaceChildren();
   const recognized = recognizedConstraints(state);
-  if (!recognized.length) {
-    const empty = document.createElement('p');
-    empty.className = 'fact muted';
-    empty.textContent = '还没有识别出条件。直接说预算、宽度、颜色或材质。';
-    facts.append(empty);
-  }
-  for (const row of recognized) {
-    const line = document.createElement('div');
-    line.className = 'fact-row';
-    line.dataset.constraint = row.field;
-    const name = document.createElement('label');
-    name.className = 'fact-name';
-    name.htmlFor = 'constraint-' + row.field;
-    name.textContent = row.name;
-    const input = document.createElement('input');
-    input.id = 'constraint-' + row.field;
-    input.value = row.value;
-    input.setAttribute('aria-label', row.name);
-    input.inputMode = row.numeric ? 'decimal' : 'text';
-    fitConstraintInput(input);
-    input.addEventListener('input', () => fitConstraintInput(input));
-    const save = document.createElement('button');
-    save.type = 'button';
-    save.className = 'chip-btn tap save';
-    save.textContent = '保存';
-    save.disabled = true;
-    input.addEventListener('input', () => {
-      save.disabled = input.value.trim() === '' || input.value.trim() === row.value;
-    });
-    save.addEventListener('click', () => editRecognized(row.field, input.value.trim(), false));
-    const remove = document.createElement('button');
-    remove.type = 'button';
-    remove.className = 'chip-btn tap remove';
-    remove.setAttribute('aria-label', '去掉' + row.name);
-    remove.textContent = '去掉';
-    remove.addEventListener('click', () => editRecognized(row.field, '', true));
-    line.append(name, input);
-    if (row.relaxable) {
-      const quiet = document.createElement('span');
-      quiet.className = 'fact-relax';
-      quiet.textContent = '可放宽';
-      line.append(quiet);
-    }
-    line.append(save, remove);
-    facts.append(line);
+  factsWrap.hidden = !recognized.length;
+  if (recognized.length) {
+    const summary = document.createElement('p');
+    summary.className = 'fact-summary';
+    summary.id = 'constraint-summary';
+    summary.textContent = recognized.map(row => row.name + ' ' + row.value).join(' · ');
+    const edit = document.createElement('button');
+    edit.type = 'button';
+    edit.className = 'fact-edit tap';
+    edit.id = 'edit-constraints';
+    edit.textContent = '编辑';
+    edit.addEventListener('click', openConstraintDialog);
+    facts.append(summary, edit);
   }
   const thread = $('#thread');
   thread.replaceChildren();
@@ -727,6 +782,12 @@ $('#rename-clear').addEventListener('click', async () => {
   if (id) await renameSession(id, '');
 });
 $('#rename-cancel').addEventListener('click', closeRename);
+$('#constraint-backdrop').addEventListener('click', closeConstraintDialog);
+$('#constraint-cancel').addEventListener('click', closeConstraintDialog);
+$('#constraint-save').addEventListener('click', () => { void saveConstraintDialog(); });
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && !$('#constraint-dialog').hidden) closeConstraintDialog();
+});
 $('#tab-recent').addEventListener('click', () => { hubTab = 'recent'; renderSessions(); });
 $('#tab-favorites').addEventListener('click', () => { hubTab = 'favorites'; renderSessions(); });
 $('#open-search').addEventListener('click', () => openNew('home', 'search'));

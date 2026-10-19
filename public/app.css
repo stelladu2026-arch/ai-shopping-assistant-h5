@@ -274,46 +274,74 @@ button, input { font: inherit; color: inherit; }
 }
 .step.is-on { color: var(--blue); border-color: #c9dafd; background: var(--blue-soft); }
 .facts {
-  margin: 8px var(--space) 0;
-  background: white;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 2px 10px 8px;
+  margin: 4px var(--space) 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
 }
-.facts summary { min-height: 32px; display: flex; align-items: center; font-size: 13px; font-weight: 650; }
+.facts[hidden] { display: none; }
 .fact { margin: 0; font-size: 13px; }
-#fact-body { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.fact-row {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  max-width: 100%;
-  margin: 0;
-  padding: 2px 2px 2px 8px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: #f8fafc;
-}
-.fact-name { flex: 0 0 auto; font-size: 13px; font-weight: 650; }
-.fact-relax { flex: 0 0 auto; font-size: 12px; color: var(--muted); }
-.fact-row input {
+#fact-body { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.fact-summary { margin: 0; font-size: 13px; line-height: 1.35; font-weight: 550; color: var(--ink); }
+.fact-edit {
   flex: 0 0 auto;
-  width: auto;
-  min-width: 3.25rem;
-  max-width: 9rem;
-  height: 34px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: white;
+  color: var(--blue);
+  font-size: 13px;
+  font-weight: 650;
+}
+.fact-relax { flex: 0 0 auto; font-size: 12px; color: var(--muted); }
+.constraint-dialog {
+  position: fixed;
+  left: 50%;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: min(100vw, 430px);
+  height: 100dvh;
+  transform: translateX(-50%);
+  padding: 16px;
+}
+.constraint-dialog[hidden] { display: none; }
+.constraint-backdrop { position: absolute; inset: 0; background: rgba(15, 23, 42, 0.45); }
+.constraint-panel {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 22rem);
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+  padding: 16px;
+  border-radius: 16px;
+  background: white;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.18);
+}
+.constraint-panel:focus { outline: none; }
+.constraint-panel h2 { margin: 0 0 8px; font-size: 15px; font-weight: 700; }
+.constraint-field { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+.constraint-field.is-removed { opacity: 0.45; }
+.constraint-field label { flex: 0 0 2.5rem; font-size: 13px; font-weight: 650; }
+.constraint-field input {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
   min-height: 0;
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 0 6px;
+  padding: 0 8px;
   background: white;
   font-size: 14px;
-  line-height: 34px;
 }
-.fact-row .chip-btn { min-height: 34px; height: 34px; padding: 0 8px; border-radius: 8px; font-size: 12px; }
-.fact-row .save { background: var(--blue); color: white; border-color: transparent; }
-.fact-row .save:disabled { opacity: 0.4; }
-.fact-row .remove { background: white; color: var(--ink); }
+.constraint-field .text-btn { flex: 0 0 auto; min-height: 32px; padding: 0 2px; color: var(--muted); font-size: 13px; font-weight: 650; }
+.constraint-actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 12px; }
+.constraint-actions .send { height: 36px; min-height: 36px; border-radius: 10px; background: var(--blue); color: white; font-size: 14px; font-weight: 650; }
+.constraint-error { margin: 8px 0 0; color: #9a3412; font-size: 12px; }
 .thread { display: flex; flex-direction: column; gap: 12px; padding: 16px; }
 .thread > * { scroll-margin-top: 72px; scroll-margin-bottom: calc(7.5rem + env(safe-area-inset-bottom)); }
 .bubble { max-width: 86%; margin: 0; padding: 12px 14px; border-radius: 16px; font-size: 15px; }

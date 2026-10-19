@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 
 interface ConstraintTag {
@@ -35,6 +36,16 @@ interface ConstraintTagsProps {
   onAction: (body: Record<string, unknown>) => void;
 }
 
+interface Draft {
+  field: string;
+  name: string;
+  value: string;
+  original: string;
+  numeric: boolean;
+  relaxable: boolean;
+  removed: boolean;
+}
+
 function fieldName(field: string) {
   if (field === "budget_max_cny") return "预算";
   if (field === "width_max_cm") return "尺寸";
@@ -46,87 +57,132 @@ function fieldName(field: string) {
   return "条件";
 }
 
-function inputWidth(value: string, numeric: boolean) {
-  const text = value.length ? value : numeric ? "0000" : "字";
-  let units = 0;
-  for (const char of text) units += char.charCodeAt(0) > 255 ? 2 : 1;
-  const chars = Math.min(12, Math.max(numeric ? 4 : 2, units));
-  return `calc(${chars}ch + 1rem)`;
+function summaryText(tags: ConstraintTag[]) {
+  return tags.map((tag) => `${fieldName(tag.field)} ${tag.value}`).join(" · ");
 }
 
-function TagEditor({
-  tag,
-  disabled,
-  revision,
-  onAction,
-}: {
-  tag: ConstraintTag;
-  disabled?: boolean;
-  revision: number;
-  onAction: (body: Record<string, unknown>) => void;
-}) {
-  const numeric = tag.field === "budget_max_cny" || tag.field === "width_max_cm";
-  const name = fieldName(tag.field);
-  const inputId = `constraint-${tag.field}`;
-  const [draft, setDraft] = useState(String(tag.value));
-  useEffect(() => {
-    setDraft(String(tag.value));
-  }, [tag.field, tag.value]);
-  const dirty = draft.trim() !== "" && draft.trim() !== String(tag.value);
-
-  return (
-    <div data-constraint-field={tag.field} className="inline-flex max-w-full items-center gap-1 rounded-lg border border-slate-200 bg-white py-0.5 pl-1.5 pr-0.5">
-      <label htmlFor={inputId} className="shrink-0 text-xs font-semibold text-slate-900">{name}</label>
-      <Input
-        id={inputId}
-        value={draft}
-        disabled={disabled}
-        inputMode={numeric ? "numeric" : "text"}
-        aria-label={name}
-        onChange={(event) => setDraft(event.target.value)}
-        style={{ width: inputWidth(draft, numeric) }}
-        className="h-[34px] w-auto min-w-[3.25rem] max-w-[9rem] shrink rounded-md px-1.5 text-[13px] shadow-none"
-      />
-      {tag.strength === "prefer" ? <span className="shrink-0 text-[0.68rem] font-medium text-slate-400">可放宽</span> : null}
-      <Button
-        type="button"
-        size="sm"
-        disabled={disabled || !dirty}
-        onClick={() => onAction({ action: "edit-constraint", field: tag.field, value: draft.trim(), revision })}
-        className="h-[34px] shrink-0 rounded-md px-2 text-xs"
-      >
-        保存
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        disabled={disabled}
-        aria-label={`去掉${name}`}
-        onClick={() => onAction({ action: "edit-constraint", field: tag.field, clear: true, revision })}
-        className="h-[34px] shrink-0 rounded-md px-2 text-xs"
-      >
-        去掉
-      </Button>
-    </div>
-  );
+function draftsFrom(tags: ConstraintTag[]): Draft[] {
+  return tags.map((tag) => ({
+    field: tag.field,
+    name: fieldName(tag.field),
+    value: String(tag.value),
+    original: String(tag.value),
+    numeric: tag.field === "budget_max_cny" || tag.field === "width_max_cm",
+    relaxable: tag.strength === "prefer",
+    removed: false,
+  }));
 }
 
 export function ConstraintTags({ tags, probe, disabled, revision, onAction }: ConstraintTagsProps) {
+  const [open, setOpen] = useState(false);
+  const [drafts, setDrafts] = useState<Draft[]>([]);
+  const [error, setError] = useState("");
+  const firstInput = useRef<HTMLInputElement>(null);
   if (!tags.length && !probe?.needsConfirm) return null;
 
+  function openEditor() {
+    setDrafts(draftsFrom(tags));
+    setError("");
+    setOpen(true);
+  }
+
+  function updateDraft(field: string, patch: Partial<Draft>) {
+    setDrafts((current) => current.map((item) => (item.field === field ? { ...item, ...patch } : item)));
+  }
+
+  function save() {
+    const changes: Array<{ field: string; value?: string; clear?: boolean }> = [];
+    for (const draft of drafts) {
+      if (draft.removed) {
+        changes.push({ field: draft.field, clear: true });
+        continue;
+      }
+      const value = draft.value.trim();
+      if (!value) {
+        setError("请填写每一项，或点去掉。");
+        return;
+      }
+      if (draft.numeric && !Number.isFinite(Number(value))) {
+        setError("预算和尺寸请填数字。");
+        return;
+      }
+      if (value !== draft.original) changes.push({ field: draft.field, value });
+    }
+    if (changes.length) onAction({ action: "edit-constraint", changes, revision });
+    setOpen(false);
+  }
+
   return (
-    <section className="rounded-xl border border-slate-200 bg-slate-50 px-2 py-1.5">
-      <p className="text-xs font-bold text-slate-900">识别出的条件</p>
+    <section className="space-y-2">
       {tags.length ? (
-        <div className="mt-1 flex flex-wrap items-center gap-1">
-          {tags.map((tag) => (
-            <TagEditor key={tag.field} tag={tag} disabled={disabled} revision={revision} onAction={onAction} />
-          ))}
+        <div data-constraint-strip className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <p data-constraint-summary className="m-0 text-[13px] font-medium leading-5 text-slate-800">{summaryText(tags)}</p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={disabled}
+            onClick={openEditor}
+            className="h-7 rounded-full px-2.5 text-xs"
+          >
+            编辑
+          </Button>
         </div>
       ) : null}
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent
+          className="gap-3 p-4"
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            firstInput.current?.focus();
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>识别出的条件</DialogTitle>
+            <DialogDescription className="sr-only">修改已读取的条件，保存后一起重新筛选。</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            {drafts.map((draft, index) => (
+              <div key={draft.field} data-constraint-field={draft.field} className={draft.removed ? "flex items-center gap-1.5 opacity-45" : "flex items-center gap-1.5"}>
+                <label htmlFor={`constraint-edit-${draft.field}`} className="w-8 shrink-0 text-xs font-semibold text-slate-900">{draft.name}</label>
+                <Input
+                  ref={index === 0 ? firstInput : undefined}
+                  id={`constraint-edit-${draft.field}`}
+                  value={draft.value}
+                  disabled={disabled || draft.removed}
+                  inputMode={draft.numeric ? "numeric" : "text"}
+                  aria-label={draft.name}
+                  onChange={(event) => updateDraft(draft.field, { value: event.target.value })}
+                  className="h-9 min-w-0 flex-1 rounded-lg px-2 text-[13px] shadow-none"
+                />
+                {draft.relaxable ? <span className="shrink-0 text-[11px] font-medium text-slate-400">可放宽</span> : null}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={disabled}
+                  aria-label={`${draft.removed ? "撤销" : "去掉"}${draft.name}`}
+                  onClick={() => updateDraft(draft.field, { removed: !draft.removed })}
+                  className="h-9 shrink-0 rounded-lg px-2 text-xs"
+                >
+                  {draft.removed ? "撤销" : "去掉"}
+                </Button>
+              </div>
+            ))}
+          </div>
+          {error ? <p className="text-xs font-medium text-orange-800">{error}</p> : null}
+          <div className="flex items-center justify-end gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={() => setOpen(false)} className="h-9 px-3 text-xs">
+              取消
+            </Button>
+            <Button type="button" size="sm" disabled={disabled} onClick={save} className="h-9 px-3 text-xs">
+              保存
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
       {probe?.needsConfirm ? (
-        <div className="mt-1.5 rounded-lg bg-white px-3 py-3">
+        <div className="rounded-lg bg-slate-50 px-3 py-3">
           <p className="text-[0.8rem] font-semibold leading-relaxed text-slate-800">
             放宽下面任一项都能查到商品。请点一项继续。
           </p>

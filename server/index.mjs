@@ -362,7 +362,6 @@ async function handleApi(request, response, url) {
     }
     const result = editConstraint(session.record.state, body, body.revision);
     if (result.ok) {
-      const beforeValue = session.record.state.constraints?.[body.field];
       const phrase = (field, value) => {
         const text = value == null ? '' : String(value);
         if (field === 'budget_max_cny') return `预算 ${text}元`;
@@ -372,7 +371,11 @@ async function handleApi(request, response, url) {
         if (field === 'exclude_material') return `不要 ${text}`;
         return text || '条件';
       };
-      const note = body.clear ? '去掉' + phrase(body.field, beforeValue) : phrase(body.field, result.state.constraints[body.field]);
+      const changes = Array.isArray(body.changes) && body.changes.length ? body.changes : [body];
+      const note = changes.map(change => {
+        const beforeValue = session.record.state.constraints?.[change.field];
+        return change.clear ? '去掉' + phrase(change.field, beforeValue) : phrase(change.field, result.state.constraints[change.field]);
+      }).join('，');
       remember(session.record, {role: 'user', text: note});
       if (result.reply) remember(session.record, {role: 'assistant', text: result.reply, status: result.status});
       session.record.state = result.state;

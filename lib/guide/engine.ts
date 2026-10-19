@@ -245,27 +245,38 @@ function clearConfirmed(next) {
   next.card = null;
 }
 
+const CONSTRAINT_FIELDS = ["budget_max_cny", "width_max_cm", "category", "color", "exclude_material", "material", "style"];
+
+function writeConstraint(next, roles, change, strict) {
+  const field = change?.field;
+  if (!CONSTRAINT_FIELDS.includes(field)) return "unknown_constraint";
+  if (change.clear) next.constraints[field] = null;
+  else if (change.value != null && String(change.value).trim() !== "") {
+    if (field === "budget_max_cny" || field === "width_max_cm") {
+      const amount = Number(change.value);
+      if (!Number.isFinite(amount)) return "bad_constraint_value";
+      next.constraints[field] = amount;
+    } else next.constraints[field] = String(change.value).trim();
+  } else if (strict) return "bad_constraint_value";
+  if (change.strength === "hard" || change.strength === "prefer") {
+    roles[field] = change.strength;
+    roles[`${field}_locked`] = change.strength === "hard";
+  }
+  return "";
+}
+
 export function editConstraint(state, patch, clientRevision) {
   if (clientRevision != null && clientRevision !== state.revision) {
     return { ok: false, error: "revision_conflict", state, needsResearch: false };
   }
-  const field = patch?.field;
-  if (!["budget_max_cny", "width_max_cm", "category", "color", "exclude_material", "material", "style"].includes(field)) {
-    return { ok: false, error: "unknown_constraint", state, needsResearch: false };
-  }
+  const batched = Array.isArray(patch?.changes);
+  const changes = batched ? patch.changes : [patch];
+  if (batched && !changes.length) return { ok: false, error: "bad_constraint_value", state, needsResearch: false };
   const next = structuredClone(state);
   const roles = mergedRoles(next.constraint_roles);
-  if (patch.clear) next.constraints[field] = null;
-  else if (patch.value != null && patch.value !== "") {
-    if (field === "budget_max_cny" || field === "width_max_cm") {
-      const amount = Number(patch.value);
-      if (!Number.isFinite(amount)) return { ok: false, error: "bad_constraint_value", state, needsResearch: false };
-      next.constraints[field] = amount;
-    } else next.constraints[field] = String(patch.value).trim();
-  }
-  if (patch.strength === "hard" || patch.strength === "prefer") {
-    roles[field] = patch.strength;
-    roles[`${field}_locked`] = patch.strength === "hard";
+  for (const change of changes) {
+    const error = writeConstraint(next, roles, change, batched);
+    if (error) return { ok: false, error, state, needsResearch: false };
   }
   next.constraint_roles = roles;
   next.probe = null;

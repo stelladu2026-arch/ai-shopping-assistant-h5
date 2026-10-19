@@ -16,13 +16,18 @@ for (const banned of ["必须满足", "优先满足", "优先考虑", "去除条
 }
 assert.match(tagsUi, /不要/);
 assert.match(tagsUi, /保存/);
+assert.match(tagsUi, /取消/);
 assert.match(tagsUi, /去掉/);
+assert.match(tagsUi, /编辑/);
 assert.match(tagsUi, /可放宽/);
-assert.match(tagsUi, /flex-wrap/);
-assert.match(tagsUi, /h-\[34px\]/);
+assert.match(tagsUi, /DialogContent/);
+assert.match(tagsUi, /data-constraint-strip/);
+assert.match(tagsUi, /action: "edit-constraint", changes, revision/);
+assert.match(tagsUi, /\$\{fieldName\(tag\.field\)\} \$\{tag\.value\}`\)\.join\(" · "\)/);
 assert.equal(/h-11 min-w-0 flex-1/.test(tagsUi), false);
 assert.equal(tagsUi.includes(">元<"), false);
 assert.equal(tagsUi.includes("厘米"), false);
+assert.equal(tagsUi.includes("h-[34px]"), false);
 const confirmLead = probeLead({ needsConfirm: true, options: [{ label: "颜色 浅色" }, { label: "风格 自然" }] });
 assert.equal(confirmLead.includes("必须满足"), false);
 assert.equal(confirmLead.includes("优先满足"), false);
@@ -178,5 +183,44 @@ let cheap = await guideAct({ action: "turn", sessionId: cheapId, text: "只看�
 cheap = await guideAct({ action: "turn", sessionId: cheapId, text: "便宜点", revision: cheap.structured.revision });
 assert.equal(cheap.structured.constraints.budget_max_cny, 3000);
 assert.match(cheap.leadText || "", /不会自行降低/);
+
+const batchBase = h5("只看沙发，预算3000元，不要皮质");
+const batchRev = batchBase.revision;
+const batchFailed = h5Edit(batchBase, { changes: [{ field: "budget_max_cny", value: "5000" }, { field: "category", value: "" }] }, batchRev);
+assert.equal(batchFailed.ok, false);
+assert.equal(batchFailed.state.constraints.budget_max_cny, 3000);
+assert.equal(batchFailed.state.constraints.exclude_material, "皮质");
+assert.equal(batchFailed.state.revision, batchRev);
+const batched = h5Edit(batchBase, {
+  changes: [
+    { field: "budget_max_cny", value: "5000" },
+    { field: "exclude_material", clear: true },
+  ],
+}, batchRev);
+assert.equal(batched.ok, true);
+assert.equal(batched.state.revision, batchRev + 1);
+assert.equal(batched.state.constraints.budget_max_cny, 5000);
+assert.equal(batched.state.constraints.category, "沙发");
+assert.equal(batched.state.constraints.exclude_material, null);
+assert.equal(batched.state.candidate_ids.includes("S04"), true);
+assert.equal(batched.state.candidate_ids.includes("S03"), true);
+
+const batchId = "edit_batch";
+await guideAct({ action: "reset", sessionId: batchId });
+let batchTurn = await guideAct({ action: "turn", sessionId: batchId, text: "只看沙发，预算3000元，不要皮质" });
+batchTurn = await guideAct({
+  action: "edit-constraint",
+  sessionId: batchId,
+  changes: [
+    { field: "budget_max_cny", value: "5000" },
+    { field: "exclude_material", clear: true },
+  ],
+  revision: batchTurn.structured.revision,
+});
+assert.equal(batchTurn.structured.constraints.budget_max_cny, 5000);
+assert.equal(batchTurn.structured.constraints.category, "沙发");
+assert.equal(batchTurn.structured.constraints.exclude_material, null);
+assert.equal(batchTurn.structured.candidateIds.includes("S04"), true);
+assert.equal(batchTurn.structured.candidateIds.includes("S03"), true);
 
 console.log("ok edit constraints");
