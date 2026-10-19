@@ -25,6 +25,62 @@ function imageSize(model) {
   return '1024x1024'.replace(/x/gi, '*');
 }
 
+function furniturePrompt(product) {
+  const name = product?.name || '';
+  const color = product?.color || '';
+  const material = product?.material || '';
+  const model = product?.model || '';
+  return `家具示意。保持资料中的名称、颜色和材质，不要改成另一种商品。${name}，${color}${material}，型号${model}。`;
+}
+
+function dashscopeHost(hostname) {
+  return /(^|\.)dashscope(?:-[a-z0-9]+)?\.aliyuncs\.com$/i.test(String(hostname || ''))
+    || /\.maas\.aliyuncs\.com$/i.test(String(hostname || ''));
+}
+
+function imageEndpoint(base) {
+  const trimmed = String(base || '').replace(/\/+$/, '');
+  if (!trimmed) return {url: '/images/generations', native: false};
+  let parsed = null;
+  try { parsed = new URL(trimmed); } catch { parsed = null; }
+  const path = parsed ? parsed.pathname.replace(/\/+$/, '') : '';
+  if (parsed && /\/images\/generations$/i.test(path)) {
+    return {url: parsed.origin + path + parsed.search, native: false};
+  }
+  if (!parsed && /\/images\/generations$/i.test(trimmed)) return {url: trimmed, native: false};
+  const compatible = /compatible-mode/i.test(parsed ? path : trimmed);
+  if (compatible) {
+    const source = parsed ? path : trimmed;
+    const suffix = /\/compatible-mode$/i.test(source) ? '/v1/images/generations' : '/images/generations';
+    if (parsed) return {url: parsed.origin + path + suffix + parsed.search, native: false};
+    return {url: trimmed + suffix, native: false};
+  }
+  if (parsed && dashscopeHost(parsed.hostname)) {
+    if (path === '/api/v1' || path.startsWith('/api/v1/')) {
+      return {url: parsed.origin + '/api/v1/services/aigc/text2image/image-synthesis', native: true};
+    }
+    if (path === '') return {url: parsed.origin + '/compatible-mode/v1/images/generations', native: false};
+  }
+  if (parsed) return {url: parsed.origin + (path || '') + '/images/generations' + parsed.search, native: false};
+  return {url: trimmed + '/images/generations', native: false};
+}
+
+function imageBody(product, model, native) {
+  const prompt = furniturePrompt(product);
+  const size = imageSize(model);
+  if (native) return {model, input: {prompt}, parameters: {size, n: 1}};
+  return {model, prompt, size, n: 1};
+}
+
+function taskEndpoint(endpoint, taskId) {
+  const parsed = new URL(endpoint);
+  return parsed.origin + '/api/v1/tasks/' + encodeURIComponent(taskId);
+}
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function detailText(value) {
   if (typeof value === 'number' && Number.isFinite(value)) return String(value);
   if (typeof value !== 'string') return '';
@@ -46,8 +102,10 @@ function redactDetail(text, secret) {
 function providerDetail(payload, secret) {
   const raw = detailText(payload?.error?.message)
     || detailText(payload?.message)
+    || detailText(payload?.output?.message)
     || detailText(payload?.error?.code)
-    || detailText(payload?.code);
+    || detailText(payload?.code)
+    || detailText(payload?.output?.code);
   return redactDetail(raw, secret);
 }
 
@@ -151,9 +209,9 @@ async function readPayload(response) {
   return null;
 }
 
-async function finishImage(response, request, secret = '') {
+async function finishImage(response, request, secret = '', known) {
   const status = Number(response?.status || 0);
-  const payload = await readPayload(response);
+  const payload = known === undefined ? await readPayload(response) : known;
   const quota = isQuotaFailure(status, payload, '');
   if (!response?.ok) {
     const label = status > 0 ? httpFailureLabel(status, payload, secret) : '返回里没有图片地址';
@@ -174,15 +232,65 @@ async function failureFromThrow(error, request) {
   return failedCall(request, '返回里没有图片地址');
 }
 
+function taskFailure(response, payload, request, secret) {
+  const status = Number(response?.status || 0);
+  const detail = providerDetail(payload, secret);
+  const quota = isQuotaFailure(status, payload, '');
+  const label = detail ? `生图接口返回 HTTP ${status}：${detail}` : '返回里没有图片地址';
+  return failedCall(request, label, {quota});
+}
+
+function producedUrl(url, request) {
+  return {simulation: false, called: true, pending_human: true, ok: true, url, label: '待核对', request};
+}
+
+async function pollNative(endpoint, request, secret, fetcher) {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (attempt > 0) await wait(1500);
+    const response = await fetcher(endpoint, {
+      method: 'GET',
+      redirect: 'manual',
+      headers: {Authorization: 'Bearer ' + secret},
+    });
+    const payload = await readPayload(response);
+    if (!response?.ok) return finishImage(response, request, secret, payload);
+    const taskStatus = String(payload?.output?.task_status || '');
+    const url = imageUrlFrom(payload);
+    if (url && taskStatus !== 'PENDING' && taskStatus !== 'RUNNING') return producedUrl(url, request);
+    if (taskStatus === 'SUCCEEDED') return failedCall(request, '返回里没有图片地址');
+    if (taskStatus === 'FAILED' || taskStatus === 'CANCELED' || taskStatus === 'UNKNOWN') {
+      return taskFailure(response, payload, request, secret);
+    }
+  }
+  return failedCall(request, '返回里没有图片地址');
+}
+
+async function readNative(response, request, secret, fetcher) {
+  const payload = await readPayload(response);
+  if (!response?.ok) return finishImage(response, request, secret, payload);
+  const taskStatus = String(payload?.output?.task_status || '');
+  const url = imageUrlFrom(payload);
+  if (url && taskStatus !== 'PENDING' && taskStatus !== 'RUNNING') return producedUrl(url, request);
+  if (taskStatus === 'FAILED' || taskStatus === 'CANCELED' || taskStatus === 'UNKNOWN') {
+    return taskFailure(response, payload, request, secret);
+  }
+  const taskId = String(payload?.output?.task_id || payload?.task_id || '').trim();
+  if (!taskId) return failedCall(request, '返回里没有图片地址');
+  return pollNative(taskEndpoint(request.url, taskId), request, secret, fetcher);
+}
+
 async function requestImage(request, env, fetcher) {
   const key = cleanEnv(env.IMAGE_API_KEY);
+  const headers = {'Content-Type': 'application/json', Authorization: 'Bearer ' + key};
+  if (request.native) headers['X-DashScope-Async'] = 'enable';
   const response = await fetcher(request.url, {
     method: 'POST',
     redirect: 'manual',
-    headers: {'Content-Type': 'application/json', Authorization: 'Bearer ' + key},
+    headers,
     body: JSON.stringify(request.body)
   });
-  return finishImage(response, request, key);
+  if (!request.native) return finishImage(response, request, key);
+  return readNative(response, request, key, fetcher);
 }
 
 export function imageStatus(env = process.env) {
@@ -197,17 +305,14 @@ export function imageStatus(env = process.env) {
 
 export function imageRequest(product, env = process.env) {
   const status = imageStatus(env);
-  const base = cleanEnv(env.IMAGE_API_BASE).replace(/\/$/, '');
+  const base = cleanEnv(env.IMAGE_API_BASE).replace(/\/+$/, '');
   const model = cleanEnv(env.IMAGE_MODEL);
+  const endpoint = imageEndpoint(status.baseConfigured ? base : '');
   return {
     method: 'POST',
-    url: (status.baseConfigured ? base : '') + '/images/generations',
-    body: {
-      model,
-      prompt: `家具示意。保持资料中的名称、颜色和材质，不要改成另一种商品。${product.name}，${product.color}${product.material}，型号${product.model}。`,
-      size: imageSize(model),
-      n: 1
-    }
+    url: endpoint.url,
+    native: endpoint.native,
+    body: imageBody(product, model, endpoint.native),
   };
 }
 

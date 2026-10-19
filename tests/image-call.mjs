@@ -131,6 +131,105 @@ async function check(executeImage) {
   assert.equal(empty.label, "返回里没有图片地址");
   assert.equal(empty.label.includes("演示回放"), false);
   assert.equal(empty.label.includes("no image"), false);
+
+  const pictured = {
+    ...product,
+    image: "/demo/sofa.png",
+    image_url: "http://localhost:3000/products/S01.png",
+  };
+  const doubled = await executeImage(pictured, {
+    ...ready,
+    IMAGE_API_BASE: "http://image.test.local/images/generations/",
+  }, async (url, init) => {
+    assert.equal(String(url), "http://image.test.local/images/generations");
+    const body = JSON.parse(String(init.body));
+    assert.equal(body.image, undefined);
+    assert.equal(body.image_url, undefined);
+    assert.deepEqual(Object.keys(body).sort(), ["model", "n", "prompt", "size"]);
+    const raw = JSON.stringify(body);
+    assert.equal(raw.includes("/demo/"), false);
+    assert.equal(raw.includes("localhost"), false);
+    assert.equal(raw.includes("/products/S01.png"), false);
+    return jsonResponse(200, { data: [{ url: imageUrl }] });
+  });
+  assert.equal(doubled.url, imageUrl);
+
+  const compat = await executeImage(pictured, {
+    ...ready,
+    IMAGE_API_BASE: "https://dashscope.aliyuncs.com/compatible-mode/v1/images/generations",
+    IMAGE_MODEL: "qwen-image-plus",
+  }, async (url, init) => {
+    assert.equal(String(url), "https://dashscope.aliyuncs.com/compatible-mode/v1/images/generations");
+    const body = JSON.parse(String(init.body));
+    assert.equal(body.model, "qwen-image-plus");
+    assert.equal(body.size, "1328*1328");
+    assert.equal(body.n, 1);
+    assert.equal(body.response_format, undefined);
+    assert.equal(body.image, undefined);
+    assert.deepEqual(Object.keys(body).sort(), ["model", "n", "prompt", "size"]);
+    const raw = JSON.stringify(body);
+    assert.equal(raw.includes("/demo/"), false);
+    assert.equal(raw.includes("localhost"), false);
+    return jsonResponse(200, { data: [{ url: imageUrl }] });
+  });
+  assert.equal(compat.url, imageUrl);
+
+  const compatBase = await executeImage(product, {
+    ...ready,
+    IMAGE_API_BASE: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    IMAGE_MODEL: "qwen-image-plus",
+  }, async (url, init) => {
+    assert.equal(String(url), "https://dashscope.aliyuncs.com/compatible-mode/v1/images/generations");
+    const body = JSON.parse(String(init.body));
+    assert.deepEqual(Object.keys(body).sort(), ["model", "n", "prompt", "size"]);
+    return jsonResponse(200, { data: [{ url: imageUrl }] });
+  });
+  assert.equal(compatBase.url, imageUrl);
+
+  let nativeCalls = 0;
+  const native = await executeImage(pictured, {
+    ...ready,
+    IMAGE_API_BASE: "https://dashscope.aliyuncs.com/api/v1/",
+    IMAGE_MODEL: "qwen-image-plus",
+  }, async (url, init) => {
+    nativeCalls += 1;
+    if (init?.body) {
+      assert.equal(String(url), "https://dashscope.aliyuncs.com/api/v1/services/aigc/text2image/image-synthesis");
+      assert.equal(String(url).includes("/images/generations"), false);
+      assert.equal(init.headers["X-DashScope-Async"], "enable");
+      const body = JSON.parse(String(init.body));
+      assert.equal(body.model, "qwen-image-plus");
+      assert.equal(body.parameters.size, "1328*1328");
+      assert.equal(body.parameters.n, 1);
+      assert.equal(body.input.prompt.includes("云朵双人沙发"), true);
+      assert.equal(body.image, undefined);
+      assert.equal(body.input.image, undefined);
+      const raw = JSON.stringify(body);
+      assert.equal(raw.includes("/demo/"), false);
+      assert.equal(raw.includes("localhost"), false);
+      assert.equal(raw.includes("/products/S01.png"), false);
+      return jsonResponse(200, { output: { task_id: "task-fixture", task_status: "PENDING" } });
+    }
+    assert.equal(String(url), "https://dashscope.aliyuncs.com/api/v1/tasks/task-fixture");
+    assert.equal(init.method, "GET");
+    return jsonResponse(200, { output: { task_status: "SUCCEEDED", results: [{ url: imageUrl }] } });
+  });
+  assert.equal(nativeCalls, 2);
+  assert.equal(native.called, true);
+  assert.equal(native.simulation, false);
+  assert.equal(native.url, imageUrl);
+
+  const urlError = await executeImage(pictured, ready, async () => jsonResponse(400, {
+    code: "InvalidParameter",
+    message: "url error, please check url！ For details, see: https://www.alibabacloud.com/help",
+  }));
+  assert.equal(urlError.called, true);
+  assert.equal(urlError.simulation, false);
+  assert.equal(urlError.url, "");
+  assert.equal(urlError.label, "生图接口返回 HTTP 400：url error, please check url！ For details, see: https://www.alibabacloud.com/help");
+  assert.equal(urlError.label.includes("image-test"), false);
+  assert.equal(urlError.label.includes("/demo/"), false);
+  assert.equal(urlError.label.includes("演示回放"), false);
 }
 
 await check(executeGuide);
