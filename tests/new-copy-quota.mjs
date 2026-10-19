@@ -80,7 +80,8 @@ try {
   assert.match(route, /newPiece: partial\.newPiece === true/);
   assert.match(page, /newPiece: true/);
   assert.match(page, /newPiece: false/);
-  assert.match(page, /startNewPiece\(previous\?\.momentsSnapshot \?\? momentsForm\)/);
+  assert.match(page, /resetToBlankCopyCard\(/);
+  assert.equal(page.includes("startNewPiece(previous?.momentsSnapshot ?? momentsForm)"), false);
   assert.match(page, /appendMomentsPiece\(/);
 
   globalThis.fetch = async () => {
