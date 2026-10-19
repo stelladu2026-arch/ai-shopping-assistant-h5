@@ -42,7 +42,8 @@ function assertGenerated(result, label) {
   assert.equal(body.includes("本次已达上限"), false, label);
   assert.equal(result.generatedImageUrl, imageUrl, label);
   assert.match(body, /云朵双人沙发/);
-  assert.match(body, /现货速发/);
+  assert.match(body, /2699/);
+  assert.equal(body.includes("演示回放、待核对"), false);
 }
 
 async function ready(sessionId) {
@@ -78,8 +79,7 @@ try {
   assert.match(route, /newPiece: partial\.newPiece === true/);
   assert.match(page, /newPiece: true/);
   assert.match(page, /newPiece: false/);
-  const continueFn = page.slice(page.indexOf("const handleContinueMomentsSetup"), page.indexOf("const generateMoments"));
-  assert.equal(continueFn.includes("agentChatRequest"), false);
+  assert.match(page, /startNewPiece\(previous\?\.momentsSnapshot \?\? momentsForm\)/);
 
   globalThis.fetch = async () => {
     throw new Error("ready should not fetch");

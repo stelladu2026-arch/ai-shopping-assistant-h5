@@ -2,12 +2,10 @@
 import { executeImage } from "./image";
 import { executeLiveCopy, modelStatus } from "./model";
 import { consumeCall, loadStep, releaseCall, resetPieceCalls, saveStep } from "./db";
-import { DEGRADE_TEXT, LIMITS, capText, FAILURE_TEXT } from "./limits";
-import { degradeLine, dropUnverifiedModelText, sealFacts } from "./facts";
+import { LIMITS, capText, FAILURE_TEXT } from "./limits";
+import { dropUnverifiedModelText, sealFacts } from "./facts";
 
 // 内容节点不检索门店资料，也不调用飞书同步。资料只使用商品决策已经读过的摘录。
-const STYLE_LABEL = { urgent: "限时抢购", warm: "温情居家", pro: "专业科普", redbook: "种草笔记" };
-const AUDIENCE_LABEL = { first_home: "首置年轻", upgrade: "家庭改善", luxury: "高端定制" };
 const UNSUPPORTED_POINTS = ["环保材质", "包送装", "质保无忧", "终身保修", "免费送装"];
 const BANNED_COPY = ["终身保修", "免费送装", "环保", "舒适", "终身质保"];
 
@@ -55,6 +53,15 @@ async function acceptedLiveCopy(facts, sealed, refused) {
   }
 }
 
+function customerSentence(facts, sealed) {
+  const bits = [String(facts.name || "").trim()];
+  const look = `${sealed.facts.color || ""}${sealed.facts.material || ""}`;
+  if (look) bits.push(look);
+  if (sealed.facts.width_cm != null) bits.push(`宽${sealed.facts.width_cm}厘米`);
+  if (sealed.facts.price_cny != null) bits.push(`标价${sealed.facts.price_cny}元`);
+  return `${bits.filter(Boolean).join("，")}。`;
+}
+
 export async function runContentNode(session, request) {
   const confirmedId = session.record.state.confirmed_product_id || null;
   const candidatesBefore = JSON.stringify(session.record.state.candidate_ids || []);
@@ -99,7 +106,6 @@ export async function runContentNode(session, request) {
   try {
     const points = Array.isArray(form.sellingPoints) ? form.sellingPoints.map((item) => String(item)) : [];
     const refused = points.filter((item) => UNSUPPORTED_POINTS.some((word) => item.includes(word)));
-    const kept = points.filter((item) => !refused.includes(item));
     const sealed = sealFacts(
       {
         name: facts.name,
@@ -111,21 +117,7 @@ export async function runContentNode(session, request) {
       },
       facts.promoPlan,
     );
-    const factLine = facts.sourceConflict
-      ? `门店资料与商品目录不一致。${DEGRADE_TEXT}`
-      : facts.sourceExcerpt
-        ? `门店资料《${facts.sourceTitle}》：${facts.sourceExcerpt}`
-        : "这件商品没有筛选资料，不能编造说明。";
-    let bodyText = [
-      factLine,
-      facts.promoPlan?.note || "",
-      degradeLine(sealed.degraded),
-      kept.length ? `已选方向：${kept.join("、")}。这些还不是已验证卖点。` : "",
-      STYLE_LABEL[form.copyStyle] ? `文案风格：${STYLE_LABEL[form.copyStyle]}。` : "",
-      AUDIENCE_LABEL[form.audience] ? `目标客群：${AUDIENCE_LABEL[form.audience]}。` : "",
-      refused.length ? `待核对，未写入正文：${refused.join("、")}。资料里没有这些承诺。` : "",
-      "演示回放、待核对。",
-    ].filter(Boolean).join("");
+    let bodyText = customerSentence(facts, sealed);
     const liveText = form.outputKind === "image_only" ? "" : await acceptedLiveCopy(facts, sealed, refused);
     if (liveText) bodyText = liveText;
     const wantsImage = form.outputKind === "image_only" || form.outputKind === "rich";
@@ -166,7 +158,7 @@ export async function runContentNode(session, request) {
     const result = {
       scene: "moments_marketing",
       outputKind: form.outputKind,
-      cardTitle: liveText ? "待核对" : "演示回放、待核对",
+      cardTitle: "待核对",
       bodyTitle: facts.name,
       bodyText: form.outputKind === "image_only" ? "" : bodyText,
       hashtags: [],
