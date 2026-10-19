@@ -37,7 +37,7 @@ assert.equal(quotaCalls, 1);
 assert.equal(quota.called, true);
 assert.equal(quota.simulation, false);
 assert.equal(quota.quota, true);
-assert.equal(quota.label, "生图接口返回 HTTP 403：quota exceeded");
+assert.equal(quota.label, "生图接口返回 HTTP 403（/images/generations）：quota exceeded");
 assert.equal(quota.label.includes("演示回放"), false);
 
 const names = ["IMAGE_API_BASE", "IMAGE_MODEL", "IMAGE_API_KEY", "GUIDE_IMAGE_ENABLED", "GUIDE_RAG_EMBED_BASE", "GUIDE_RAG_EMBED_API_KEY", "GUIDE_RAG_EMBED_MODEL", "GUIDE_RAG_RERANK_BASE", "GUIDE_RAG_RERANK_API_KEY", "GUIDE_RAG_RERANK_MODEL", "GUIDE_RAG_REMOTE_CONFIRMED", "DASHSCOPE_API_KEY", "GUIDE_AGENT_LIVE_MODEL", "QWEN_FREE_TIER_ONLY_CONFIRMED", "FEISHU_SYNC_ENABLED"];
@@ -110,7 +110,7 @@ try {
   assert.match(billed.moments.bodyText, /2699/);
   assert.equal(billed.moments.bodyText.includes("演示回放、待核对"), false);
   assert.equal(billed.moments.generatedImageUrl, "");
-  assert.equal(billed.moments.imagePlaceholder, "生图接口返回 HTTP 429：billing quota");
+  assert.equal(billed.moments.imagePlaceholder, "生图接口返回 HTTP 429（/images/generations）：billing quota");
   assert.equal(billed.moments.imagePlaceholder.includes("演示回放"), false);
   assert.equal(billed.leadText.includes("素材没有生成"), false);
   assert.equal(materialBefore === "" || billed.moments.bodyText.length > 0, true);
@@ -214,7 +214,7 @@ try {
   assert.equal(liveQuota.confirmedId, "S01");
   assert.equal(liveQuota.confirmedUnchanged, true);
   assert.equal(liveQuota.moments.generatedImageUrl, "");
-  assert.equal(liveQuota.moments.imagePlaceholder, "生图接口返回 HTTP 402：quota exceeded");
+  assert.equal(liveQuota.moments.imagePlaceholder, "生图接口返回 HTTP 402（/images/generations）：quota exceeded");
   assert.equal(liveQuota.moments.bodyText, liveSentence);
   assert.equal(liveQuota.moments.bodyText.includes("演示回放、待核对"), false);
   assert.equal(liveQuota.leadText.includes("素材没有生成"), false);

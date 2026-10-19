@@ -38,37 +38,56 @@ function dashscopeHost(hostname) {
     || /\.maas\.aliyuncs\.com$/i.test(String(hostname || ''));
 }
 
-function imageEndpoint(base) {
-  const trimmed = String(base || '').replace(/\/+$/, '');
-  if (!trimmed) return {url: '/images/generations', native: false};
+function qwenImageModel(model) {
+  const name = String(model || '');
+  if (/wan/i.test(name)) return false;
+  return /qwen-image|qwen/i.test(name);
+}
+
+function normalizeImageBase(base) {
+  let text = String(base || '').trim();
+  const chat = text.match(/\/chat\/completions/i);
+  if (chat) text = text.slice(0, chat.index);
+  return text.replace(/\/+$/, '');
+}
+
+function imageEndpoint(base, model) {
+  const trimmed = normalizeImageBase(base);
+  if (!trimmed) return {url: '/images/generations', native: false, kind: 'openai'};
   let parsed = null;
   try { parsed = new URL(trimmed); } catch { parsed = null; }
   const path = parsed ? parsed.pathname.replace(/\/+$/, '') : '';
   if (parsed && /\/images\/generations$/i.test(path)) {
-    return {url: parsed.origin + path + parsed.search, native: false};
+    return {url: parsed.origin + path + parsed.search, native: false, kind: 'openai'};
   }
-  if (!parsed && /\/images\/generations$/i.test(trimmed)) return {url: trimmed, native: false};
+  if (!parsed && /\/images\/generations$/i.test(trimmed)) return {url: trimmed, native: false, kind: 'openai'};
   const compatible = /compatible-mode/i.test(parsed ? path : trimmed);
   if (compatible) {
     const source = parsed ? path : trimmed;
     const suffix = /\/compatible-mode$/i.test(source) ? '/v1/images/generations' : '/images/generations';
-    if (parsed) return {url: parsed.origin + path + suffix + parsed.search, native: false};
-    return {url: trimmed + suffix, native: false};
+    if (parsed) return {url: parsed.origin + path + suffix + parsed.search, native: false, kind: 'openai'};
+    return {url: trimmed + suffix, native: false, kind: 'openai'};
   }
   if (parsed && dashscopeHost(parsed.hostname)) {
     if (path === '/api/v1' || path.startsWith('/api/v1/')) {
-      return {url: parsed.origin + '/api/v1/services/aigc/text2image/image-synthesis', native: true};
+      if (qwenImageModel(model)) {
+        return {url: parsed.origin + '/api/v1/services/aigc/multimodal-generation/generation', native: false, kind: 'multimodal'};
+      }
+      return {url: parsed.origin + '/api/v1/services/aigc/text2image/image-synthesis', native: true, kind: 'async'};
     }
-    if (path === '') return {url: parsed.origin + '/compatible-mode/v1/images/generations', native: false};
+    if (path === '') return {url: parsed.origin + '/compatible-mode/v1/images/generations', native: false, kind: 'openai'};
   }
-  if (parsed) return {url: parsed.origin + (path || '') + '/images/generations' + parsed.search, native: false};
-  return {url: trimmed + '/images/generations', native: false};
+  if (parsed) return {url: parsed.origin + (path || '') + '/images/generations' + parsed.search, native: false, kind: 'openai'};
+  return {url: trimmed + '/images/generations', native: false, kind: 'openai'};
 }
 
-function imageBody(product, model, native) {
+function imageBody(product, model, kind) {
   const prompt = furniturePrompt(product);
   const size = imageSize(model);
-  if (native) return {model, input: {prompt}, parameters: {size, n: 1}};
+  if (kind === 'multimodal') {
+    return {model, input: {messages: [{role: 'user', content: [{text: prompt}]}]}, parameters: {size, n: 1, watermark: false}};
+  }
+  if (kind === 'async') return {model, input: {prompt}, parameters: {size, n: 1}};
   return {model, prompt, size, n: 1};
 }
 
@@ -109,9 +128,36 @@ function providerDetail(payload, secret) {
   return redactDetail(raw, secret);
 }
 
-function httpFailureLabel(status, payload, secret) {
+function requestPath(endpoint) {
+  const text = String(endpoint || '').trim();
+  if (!text) return '';
+  try {
+    const path = new URL(text).pathname || '';
+    return path.replace(/\/+$/, '') || '/';
+  } catch {
+    const bare = text.split('?')[0].split('#')[0];
+    if (!bare.startsWith('/')) return '';
+    return bare.replace(/\/+$/, '') || '/';
+  }
+}
+
+function capVisible(text, secret) {
+  let value = String(text || '');
+  const key = String(secret || '');
+  if (key.length >= 4) value = value.split(key).join('');
+  value = value.replace(/Bearer\s+\S+/gi, '');
+  value = value.replace(/\bsk-[A-Za-z0-9_-]{8,}\b/g, '');
+  value = value.replace(/\s+/g, ' ').trim();
+  if (value.length > 160) value = value.slice(0, 160).trim();
+  return value;
+}
+
+function httpFailureLabel(status, payload, secret, endpoint) {
   const detail = providerDetail(payload, secret);
-  return detail ? `生图接口返回 HTTP ${status}：${detail}` : `生图接口返回 HTTP ${status}`;
+  const path = requestPath(endpoint);
+  const where = path ? `（${path}）` : '';
+  const label = detail ? `生图接口返回 HTTP ${status}${where}：${detail}` : `生图接口返回 HTTP ${status}${where}`;
+  return capVisible(label, secret);
 }
 
 function isQuotaFailure(status, payload, raw) {
@@ -209,12 +255,12 @@ async function readPayload(response) {
   return null;
 }
 
-async function finishImage(response, request, secret = '', known) {
+async function finishImage(response, request, secret = '', known, endpoint) {
   const status = Number(response?.status || 0);
   const payload = known === undefined ? await readPayload(response) : known;
   const quota = isQuotaFailure(status, payload, '');
   if (!response?.ok) {
-    const label = status > 0 ? httpFailureLabel(status, payload, secret) : '返回里没有图片地址';
+    const label = status > 0 ? httpFailureLabel(status, payload, secret, endpoint || request?.url) : '返回里没有图片地址';
     return failedCall(request, label, {quota});
   }
   const url = imageUrlFrom(payload);
@@ -232,11 +278,11 @@ async function failureFromThrow(error, request) {
   return failedCall(request, '返回里没有图片地址');
 }
 
-function taskFailure(response, payload, request, secret) {
+function taskFailure(response, payload, request, secret, endpoint) {
   const status = Number(response?.status || 0);
   const detail = providerDetail(payload, secret);
   const quota = isQuotaFailure(status, payload, '');
-  const label = detail ? `生图接口返回 HTTP ${status}：${detail}` : '返回里没有图片地址';
+  const label = detail ? httpFailureLabel(status, payload, secret, endpoint || request?.url) : '返回里没有图片地址';
   return failedCall(request, label, {quota});
 }
 
@@ -253,13 +299,13 @@ async function pollNative(endpoint, request, secret, fetcher) {
       headers: {Authorization: 'Bearer ' + secret},
     });
     const payload = await readPayload(response);
-    if (!response?.ok) return finishImage(response, request, secret, payload);
+    if (!response?.ok) return finishImage(response, request, secret, payload, endpoint);
     const taskStatus = String(payload?.output?.task_status || '');
     const url = imageUrlFrom(payload);
     if (url && taskStatus !== 'PENDING' && taskStatus !== 'RUNNING') return producedUrl(url, request);
     if (taskStatus === 'SUCCEEDED') return failedCall(request, '返回里没有图片地址');
     if (taskStatus === 'FAILED' || taskStatus === 'CANCELED' || taskStatus === 'UNKNOWN') {
-      return taskFailure(response, payload, request, secret);
+      return taskFailure(response, payload, request, secret, endpoint);
     }
   }
   return failedCall(request, '返回里没有图片地址');
@@ -307,12 +353,12 @@ export function imageRequest(product, env = process.env) {
   const status = imageStatus(env);
   const base = cleanEnv(env.IMAGE_API_BASE).replace(/\/+$/, '');
   const model = cleanEnv(env.IMAGE_MODEL);
-  const endpoint = imageEndpoint(status.baseConfigured ? base : '');
+  const endpoint = imageEndpoint(status.baseConfigured ? base : '', model);
   return {
     method: 'POST',
     url: endpoint.url,
     native: endpoint.native,
-    body: imageBody(product, model, endpoint.native),
+    body: imageBody(product, model, endpoint.kind),
   };
 }
 
