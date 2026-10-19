@@ -116,7 +116,7 @@ export function ConstraintTags({ tags, probe, disabled, revision, onAction }: Co
     <section className="space-y-2">
       {tags.length ? (
         <div data-constraint-strip className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <p data-constraint-summary className="m-0 text-[13px] font-medium leading-5 text-slate-800">{summaryText(tags)}</p>
+          <p data-constraint-summary className="m-0 min-w-0 flex-1 whitespace-normal break-words text-[13px] font-medium leading-5 text-slate-800">{summaryText(tags)}</p>
           <Button
             type="button"
             variant="outline"

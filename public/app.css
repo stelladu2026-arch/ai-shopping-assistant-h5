@@ -282,7 +282,7 @@ button, input { font: inherit; color: inherit; }
 .facts[hidden] { display: none; }
 .fact { margin: 0; font-size: 13px; }
 #fact-body { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
-.fact-summary { margin: 0; font-size: 13px; line-height: 1.35; font-weight: 550; color: var(--ink); }
+.fact-summary { margin: 0; min-width: 0; font-size: 13px; line-height: 1.35; font-weight: 550; color: var(--ink); overflow-wrap: anywhere; }
 .fact-edit {
   flex: 0 0 auto;
   height: 28px;

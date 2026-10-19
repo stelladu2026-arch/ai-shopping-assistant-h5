@@ -223,4 +223,95 @@ assert.equal(batchTurn.structured.constraints.exclude_material, null);
 assert.equal(batchTurn.structured.candidateIds.includes("S04"), true);
 assert.equal(batchTurn.structured.candidateIds.includes("S03"), true);
 
+function collapsedLine(tags) {
+  const names = {
+    budget_max_cny: "预算",
+    width_max_cm: "尺寸",
+    category: "品类",
+    color: "颜色",
+    exclude_material: "不要",
+    material: "材质",
+    style: "风格",
+  };
+  return tags.map((tag) => `${names[tag.field] || "条件"} ${tag.value}`).join(" · ");
+}
+
+const spokenH5 = h5("预算3千，只看柜子");
+assert.equal(spokenH5.constraints.budget_max_cny, 3000);
+assert.equal(spokenH5.constraints.category, "柜子");
+assert.equal(
+  [`预算 ${spokenH5.constraints.budget_max_cny}`, `品类 ${spokenH5.constraints.category}`].join(" · "),
+  "预算 3000 · 品类 柜子",
+);
+assert.equal(h5("预算3千元").constraints.budget_max_cny, 3000);
+assert.equal(h5("预算三千").constraints.budget_max_cny, 3000);
+assert.equal(h5("预算1万").constraints.budget_max_cny, 10000);
+assert.equal(h5("预算1万元").constraints.budget_max_cny, 10000);
+assert.equal(h5("预算一万").constraints.budget_max_cny, 10000);
+assert.equal(h5("预算2百").constraints.budget_max_cny, 200);
+assert.equal(h5("预算两百").constraints.budget_max_cny, 200);
+assert.equal(h5("预算3k").constraints.budget_max_cny, 3000);
+assert.equal(h5("预算3K").constraints.budget_max_cny, 3000);
+assert.equal(h5("预算3000元").constraints.budget_max_cny, 3000);
+assert.equal(h5("宽度不超过1.8米").constraints.width_max_cm, 180);
+assert.equal(h5("宽度不超过180厘米").constraints.width_max_cm, 180);
+const words = h5("浅色柜子，不要皮质");
+assert.equal(words.constraints.color, "浅色");
+assert.equal(words.constraints.exclude_material, "皮质");
+assert.equal(words.constraints.category, "柜子");
+const kept = h5Edit(spokenH5, {
+  changes: [
+    { field: "budget_max_cny", value: "3000" },
+    { field: "category", value: "柜子" },
+  ],
+}, spokenH5.revision);
+assert.equal(kept.ok, true);
+assert.equal(kept.state.constraints.budget_max_cny, 3000);
+assert.equal(kept.state.constraints.category, "柜子");
+const sofaBase = h5("只看沙发");
+const spokenEdit = h5Edit(sofaBase, { field: "budget_max_cny", value: "3千" }, sofaBase.revision);
+assert.equal(spokenEdit.ok, true);
+assert.equal(spokenEdit.state.constraints.budget_max_cny, 3000);
+assert.equal(spokenEdit.state.constraints.category, "沙发");
+const meterEdit = h5Edit(sofaBase, { field: "width_max_cm", value: "1.8米" }, sofaBase.revision);
+assert.equal(meterEdit.state.constraints.width_max_cm, 180);
+
+const amountId = "amount_qian";
+await guideAct({ action: "reset", sessionId: amountId });
+let amount = await guideAct({ action: "turn", sessionId: amountId, text: "预算3千，只看柜子" });
+assert.equal(amount.structured.constraints.budget_max_cny, 3000);
+assert.equal(amount.structured.constraints.category, "柜子");
+assert.equal(amount.structured.constraints.color, null);
+assert.equal(collapsedLine(amount.structured.constraintTags), "预算 3000 · 品类 柜子");
+assert.equal(amount.structured.candidateIds.includes("K01"), true);
+assert.equal(amount.structured.candidateIds.includes("S01"), false);
+amount = await guideAct({
+  action: "edit-constraint",
+  sessionId: amountId,
+  changes: [
+    { field: "budget_max_cny", value: "3000" },
+    { field: "category", value: "柜子" },
+  ],
+  revision: amount.structured.revision,
+});
+assert.equal(amount.structured.constraints.budget_max_cny, 3000);
+assert.equal(amount.structured.constraints.category, "柜子");
+assert.equal(collapsedLine(amount.structured.constraintTags), "预算 3000 · 品类 柜子");
+
+const wanId = "amount_wan";
+await guideAct({ action: "reset", sessionId: wanId });
+const wan = await guideAct({ action: "turn", sessionId: wanId, text: "预算1万元" });
+assert.equal(wan.structured.constraints.budget_max_cny, 10000);
+assert.match(collapsedLine(wan.structured.constraintTags), /预算 10000/);
+
+const meterId = "amount_meter";
+await guideAct({ action: "reset", sessionId: meterId });
+const meter = await guideAct({ action: "turn", sessionId: meterId, text: "宽度不超过1.8米，只看沙发，预算3000元" });
+assert.equal(meter.structured.constraints.width_max_cm, 180);
+assert.equal(meter.structured.constraints.budget_max_cny, 3000);
+assert.equal(meter.structured.constraints.category, "沙发");
+assert.match(collapsedLine(meter.structured.constraintTags), /预算 3000/);
+assert.match(collapsedLine(meter.structured.constraintTags), /尺寸 180/);
+assert.match(collapsedLine(meter.structured.constraintTags), /品类 沙发/);
+
 console.log("ok edit constraints");
