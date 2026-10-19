@@ -21,7 +21,7 @@ const skipped = await executeImage(product, { ...imageEnv, GUIDE_IMAGE_ENABLED: 
 assert.equal(skippedCalls, 0);
 assert.equal(skipped.called, false);
 assert.equal(skipped.simulation, true);
-assert.equal(skipped.label, "演示回放、待核对");
+assert.equal(skipped.label, "没有调用生图接口");
 
 let quotaCalls = 0;
 const quota = await executeImage(product, imageEnv, async (url) => {
@@ -34,10 +34,11 @@ const quota = await executeImage(product, imageEnv, async (url) => {
   };
 });
 assert.equal(quotaCalls, 1);
-assert.equal(quota.called, false);
-assert.equal(quota.simulation, true);
+assert.equal(quota.called, true);
+assert.equal(quota.simulation, false);
 assert.equal(quota.quota, true);
-assert.equal(quota.label, "演示回放、待核对");
+assert.equal(quota.label, "生图接口返回 HTTP 403");
+assert.equal(quota.label.includes("演示回放"), false);
 
 const names = ["IMAGE_API_BASE", "IMAGE_MODEL", "IMAGE_API_KEY", "GUIDE_IMAGE_ENABLED", "GUIDE_RAG_EMBED_BASE", "GUIDE_RAG_EMBED_API_KEY", "GUIDE_RAG_EMBED_MODEL", "GUIDE_RAG_RERANK_BASE", "GUIDE_RAG_RERANK_API_KEY", "GUIDE_RAG_RERANK_MODEL", "GUIDE_RAG_REMOTE_CONFIRMED", "DASHSCOPE_API_KEY", "GUIDE_AGENT_LIVE_MODEL", "QWEN_FREE_TIER_ONLY_CONFIRMED", "FEISHU_SYNC_ENABLED"];
 const saved = {};
@@ -79,6 +80,7 @@ try {
   assert.match(disabled.moments.bodyText, /现货速发/);
   assert.match(disabled.moments.bodyText, /演示回放、待核对/);
   assert.equal(disabled.moments.generatedImageUrl, "");
+  assert.equal(disabled.moments.imagePlaceholder, "没有调用生图接口");
   assert.equal(disabled.structured.confirmedId, "S01");
 
   process.env.GUIDE_IMAGE_ENABLED = "true";
@@ -107,6 +109,8 @@ try {
   assert.match(billed.moments.bodyText, /云朵双人沙发/);
   assert.match(billed.moments.bodyText, /演示回放、待核对/);
   assert.equal(billed.moments.generatedImageUrl, "");
+  assert.equal(billed.moments.imagePlaceholder, "生图接口返回 HTTP 429");
+  assert.equal(billed.moments.imagePlaceholder.includes("演示回放"), false);
   assert.equal(billed.leadText.includes("素材没有生成"), false);
   assert.equal(materialBefore === "" || billed.moments.bodyText.length > 0, true);
 
@@ -157,6 +161,7 @@ try {
   assert.equal(offline.confirmedId, "S01");
   assert.equal(offline.confirmedUnchanged, true);
   assert.equal(offline.moments.generatedImageUrl, imageUrl);
+  assert.equal(offline.moments.imagePlaceholder || "", "");
   assert.match(offline.moments.bodyText, /云朵双人沙发/);
   assert.match(offline.moments.bodyText, /现货速发/);
   assert.match(offline.moments.bodyText, /演示回放、待核对/);
@@ -208,6 +213,7 @@ try {
   assert.equal(liveQuota.confirmedId, "S01");
   assert.equal(liveQuota.confirmedUnchanged, true);
   assert.equal(liveQuota.moments.generatedImageUrl, "");
+  assert.equal(liveQuota.moments.imagePlaceholder, "生图接口返回 HTTP 402");
   assert.equal(liveQuota.moments.bodyText, liveSentence);
   assert.equal(liveQuota.moments.bodyText.includes("演示回放、待核对"), false);
   assert.equal(liveQuota.leadText.includes("素材没有生成"), false);

@@ -19,7 +19,8 @@ function buildCopyPayload(data: MomentsGenerationResult): string {
   if (data.hashtags.length) {
     lines.push(data.hashtags.map((h) => (h.startsWith("#") ? h : `#${h}`)).join(" "));
   }
-  if (data.generatedImageUrl) lines.push(data.generatedImageUrl);
+  if (data.generatedImageUrl && !data.generatedImageUrl.startsWith("data:")) lines.push(data.generatedImageUrl);
+  else if (!data.generatedImageUrl && data.imagePlaceholder?.trim()) lines.push(data.imagePlaceholder);
   if (data.commentThreadScript?.trim()) lines.push(data.commentThreadScript);
   return lines.join("\n\n");
 }
@@ -104,15 +105,14 @@ export function MomentsResultCard({ data, onDownloadHint, headerTrailing }: Mome
               ) : null}
             </div>
             {data.generatedImageUrl ? (
-              <div
-                className="mt-2 h-48 w-full rounded-xl bg-cover bg-center"
-                style={{ backgroundImage: `url(${data.generatedImageUrl})` }}
-                role="img"
-                aria-label="AI 生成配图"
+              <img
+                src={data.generatedImageUrl}
+                alt="AI 生成配图"
+                className="mt-2 h-48 w-full rounded-xl object-cover"
               />
             ) : (
-              <div className="mt-2 flex aspect-[4/3] max-h-48 items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50 text-[0.75rem] font-medium text-slate-400">
-                演示回放、待核对
+              <div className="mt-2 flex aspect-[4/3] max-h-48 items-center justify-center overflow-auto rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 text-center text-[0.75rem] font-medium leading-relaxed text-slate-400">
+                {data.imagePlaceholder?.trim() || "演示回放、待核对"}
               </div>
             )}
             {data.imageSuggestion?.trim() ? (

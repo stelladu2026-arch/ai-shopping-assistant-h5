@@ -361,6 +361,13 @@ button, input { font: inherit; color: inherit; }
   color: var(--muted);
   background: repeating-linear-gradient(135deg, #f4f7fb, #f4f7fb 12px, #e8eef6 12px, #e8eef6 24px);
 }
+.placeholder {
+  height: auto;
+  min-height: 148px;
+  padding: 16px;
+  text-align: center;
+  line-height: 1.5;
+}
 .shot { width: 100%; object-fit: cover; display: block; background: #f4f7fb; }
 .product h2, .draft h2, .panel h2 { margin: 10px 0 4px; font-size: 17px; }
 .price { margin: 4px 0; font-size: 18px; font-weight: 700; color: var(--ink); }
