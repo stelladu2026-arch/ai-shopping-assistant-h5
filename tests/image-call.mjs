@@ -38,6 +38,12 @@ async function check(executeImage) {
   const shown = await executeImage(product, ready, async (url, init) => {
     assert.equal(String(url), "http://image.test.local/images/generations");
     assert.equal(init.headers.Authorization, "Bearer image-test");
+    const body = JSON.parse(String(init.body));
+    assert.equal(JSON.stringify(body).includes("1024x1024"), false);
+    assert.equal(body.size, "1024*1024");
+    assert.equal(body.n, 1);
+    assert.equal(body.response_format, undefined);
+    assert.deepEqual(Object.keys(body).sort(), ["model", "n", "prompt", "size"]);
     return jsonResponse(200, { data: [{ url: imageUrl }] });
   });
   assert.equal(shown.called, true);
@@ -76,16 +82,45 @@ async function check(executeImage) {
   });
   assert.equal(quoted.url, imageUrl);
 
+  const qwen = await executeImage(product, { ...ready, IMAGE_MODEL: "qwen-image-plus" }, async (_url, init) => {
+    const body = JSON.parse(String(init.body));
+    assert.equal(body.model, "qwen-image-plus");
+    assert.equal(body.size, "1328*1328");
+    assert.equal(body.n, 1);
+    assert.equal(body.response_format, undefined);
+    assert.equal(JSON.stringify(body).includes("1024x1024"), false);
+    assert.deepEqual(Object.keys(body).sort(), ["model", "n", "prompt", "size"]);
+    return jsonResponse(200, { data: [{ url: imageUrl }] });
+  });
+  assert.equal(qwen.url, imageUrl);
+  assert.equal(qwen.called, true);
+  assert.equal(qwen.simulation, false);
+
   const rejected = await executeImage(product, ready, async () => jsonResponse(400, {
-    error: { message: "size rejected", type: "invalid_request_error" },
+    error: { message: "InvalidParameter", type: "invalid_request_error" },
   }));
   assert.equal(rejected.called, true);
   assert.equal(rejected.simulation, false);
   assert.equal(rejected.url, "");
-  assert.equal(rejected.label, "生图接口返回 HTTP 400");
+  assert.equal(rejected.label, "生图接口返回 HTTP 400：InvalidParameter");
   assert.equal(rejected.label.includes("演示回放"), false);
-  assert.equal(rejected.label.includes("size rejected"), false);
+  assert.equal(rejected.label.includes("invalid_request_error"), false);
   assert.equal(rejected.label.includes("image-test"), false);
+
+  const coded = await executeImage(product, ready, async () => jsonResponse(400, {
+    code: "InvalidParameter",
+  }));
+  assert.equal(coded.called, true);
+  assert.equal(coded.simulation, false);
+  assert.equal(coded.url, "");
+  assert.equal(coded.label, "生图接口返回 HTTP 400：InvalidParameter");
+
+  const leaked = await executeImage(product, ready, async () => jsonResponse(400, {
+    message: "InvalidParameter image-test sk-abcdefghijklmnopqrstuvwxyz",
+  }));
+  assert.equal(leaked.label, "生图接口返回 HTTP 400：InvalidParameter");
+  assert.equal(leaked.label.includes("image-test"), false);
+  assert.equal(leaked.label.includes("sk-"), false);
 
   const empty = await executeImage(product, ready, async () => jsonResponse(200, {
     error: { message: "no image" },

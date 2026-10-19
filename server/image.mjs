@@ -15,6 +15,46 @@ function cleanEnv(value) {
   return text;
 }
 
+function dashscopeImageModel(model) {
+  return /qwen|dashscope/i.test(String(model || ''));
+}
+
+function imageSize(model) {
+  if (dashscopeImageModel(model)) return '1328*1328';
+  return '1024x1024'.replace(/x/gi, '*');
+}
+
+function detailText(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  if (typeof value !== 'string') return '';
+  return value.replace(/\s+/g, ' ').trim();
+}
+
+function redactDetail(text, secret) {
+  let value = String(text || '');
+  const key = String(secret || '');
+  if (key.length >= 4) value = value.split(key).join('');
+  value = value.replace(/Bearer\s+\S+/gi, '');
+  value = value.replace(/\bsk-[A-Za-z0-9_-]{8,}\b/g, '');
+  value = value.replace(/\b(?:api[_-]?key|access[_-]?token)\s*[:=]\s*\S+/gi, '');
+  value = value.replace(/\s+/g, ' ').trim();
+  if (value.length > 80) value = value.slice(0, 80).trim();
+  return value;
+}
+
+function providerDetail(payload, secret) {
+  const raw = detailText(payload?.error?.message)
+    || detailText(payload?.message)
+    || detailText(payload?.error?.code)
+    || detailText(payload?.code);
+  return redactDetail(raw, secret);
+}
+
+function httpFailureLabel(status, payload, secret) {
+  const detail = providerDetail(payload, secret);
+  return detail ? `生图接口返回 HTTP ${status}：${detail}` : `生图接口返回 HTTP ${status}`;
+}
+
 function isQuotaFailure(status, payload, raw) {
   if (status === 402 || status === 429) return true;
   const code = String(payload?.code || payload?.error?.code || payload?.error?.type || '');
@@ -118,12 +158,12 @@ async function readPayload(response) {
   return null;
 }
 
-async function finishImage(response, request) {
+async function finishImage(response, request, secret = '') {
   const status = Number(response?.status || 0);
   const payload = await readPayload(response);
   const quota = isQuotaFailure(status, payload, '');
   if (!response?.ok) {
-    const label = status > 0 ? `生图接口返回 HTTP ${status}` : '返回里没有图片地址';
+    const label = status > 0 ? httpFailureLabel(status, payload, secret) : '返回里没有图片地址';
     return failedCall(request, label, {quota});
   }
   const url = imageUrlFrom(payload);
@@ -144,15 +184,15 @@ export function imageStatus(env = process.env) {
 export function imageRequest(product, env = process.env) {
   const status = imageStatus(env);
   const base = cleanEnv(env.IMAGE_API_BASE).replace(/\/$/, '');
+  const model = cleanEnv(env.IMAGE_MODEL);
   return {
     method: 'POST',
     url: (status.baseConfigured ? base : '') + '/images/generations',
     body: {
-      model: cleanEnv(env.IMAGE_MODEL),
+      model,
       prompt: `家具示意。保持资料中的名称、颜色和材质，不要改成另一种商品。${product.name}，${product.color}${product.material}，型号${product.model}。`,
-      size: '1024x1024',
-      n: 1,
-      response_format: 'url'
+      size: imageSize(model),
+      n: 1
     }
   };
 }
@@ -161,14 +201,15 @@ export async function executeImage(product, env = process.env, fetcher = fetch) 
   const status = imageStatus(env);
   const request = imageRequest(product, env);
   if (!status.ready) return skipped(request);
+  const key = cleanEnv(env.IMAGE_API_KEY);
   try {
     const response = await fetcher(request.url, {
       method: 'POST',
       redirect: 'manual',
-      headers: {'Content-Type': 'application/json', Authorization: 'Bearer ' + cleanEnv(env.IMAGE_API_KEY)},
+      headers: {'Content-Type': 'application/json', Authorization: 'Bearer ' + key},
       body: JSON.stringify(request.body)
     });
-    return finishImage(response, request);
+    return finishImage(response, request, key);
   } catch (error) {
     const message = String(error?.message || error || '');
     if (isQuotaFailure(0, null, message) && !isTransportError(error)) {
