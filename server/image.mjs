@@ -49,6 +49,27 @@ function dashscopeHost(hostname) {
     || /\.maas\.aliyuncs\.com$/i.test(String(hostname || ''));
 }
 
+function sharedDashscopeImageHost(hostname) {
+  const host = String(hostname || '').toLowerCase();
+  return host === 'dashscope.aliyuncs.com' || host === 'dashscope-intl.aliyuncs.com';
+}
+
+function multimodalEndpoint(parsed) {
+  return {
+    url: parsed.origin + '/api/v1/services/aigc/multimodal-generation/generation',
+    native: false,
+    kind: 'multimodal',
+  };
+}
+
+function asyncEndpoint(parsed) {
+  return {
+    url: parsed.origin + '/api/v1/services/aigc/text2image/image-synthesis',
+    native: true,
+    kind: 'async',
+  };
+}
+
 function qwenImageModel(model) {
   const name = String(model || '');
   if (/wan/i.test(name)) return false;
@@ -68,6 +89,10 @@ function imageEndpoint(base, model) {
   let parsed = null;
   try { parsed = new URL(trimmed); } catch { parsed = null; }
   const path = parsed ? parsed.pathname.replace(/\/+$/, '') : '';
+  if (parsed && sharedDashscopeImageHost(parsed.hostname)) {
+    if ((path === '/api/v1' || path.startsWith('/api/v1/')) && !qwenImageModel(model)) return asyncEndpoint(parsed);
+    return multimodalEndpoint(parsed);
+  }
   if (parsed && /\/images\/generations$/i.test(path)) {
     const kind = /compatible-mode/i.test(path) ? 'compatible' : 'openai';
     return {url: parsed.origin + path + parsed.search, native: false, kind};
@@ -85,10 +110,8 @@ function imageEndpoint(base, model) {
   }
   if (parsed && dashscopeHost(parsed.hostname)) {
     if (path === '/api/v1' || path.startsWith('/api/v1/')) {
-      if (qwenImageModel(model)) {
-        return {url: parsed.origin + '/api/v1/services/aigc/multimodal-generation/generation', native: false, kind: 'multimodal'};
-      }
-      return {url: parsed.origin + '/api/v1/services/aigc/text2image/image-synthesis', native: true, kind: 'async'};
+      if (qwenImageModel(model)) return multimodalEndpoint(parsed);
+      return asyncEndpoint(parsed);
     }
     if (path === '') return {url: parsed.origin + '/compatible-mode/v1/images/generations', native: false, kind: 'compatible'};
   }
