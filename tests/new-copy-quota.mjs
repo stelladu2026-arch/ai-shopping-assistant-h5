@@ -135,7 +135,7 @@ try {
   assert.equal(previous.cardTitle.includes("已达本次上限"), false);
   assert.equal(String(previous.bodyText || "").includes("已达本次上限"), false);
   assert.equal(previous.generatedImageUrl, "");
-  assert.equal(previous.imagePlaceholder, "生图接口返回 HTTP 402");
+  assert.equal(previous.imagePlaceholder, "生图接口返回 HTTP 402：quota exceeded");
   assert.equal(counts(pieceId).image || 0, 0);
   assert.equal(counts(pieceId).content, 1);
   globalThis.fetch = async () => imageResponse(200, { data: [{ url: imageUrl }] });
