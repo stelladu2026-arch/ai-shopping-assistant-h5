@@ -159,20 +159,21 @@ async function check(executeImage) {
     IMAGE_API_BASE: "https://dashscope.aliyuncs.com/compatible-mode/v1/images/generations",
     IMAGE_MODEL: "qwen-image-plus",
   }, async (url, init) => {
-    assert.equal(String(url), "https://dashscope.aliyuncs.com/compatible-mode/v1/images/generations");
+    assert.equal(String(url), "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation");
+    assert.equal(String(url).includes("/images/generations"), false);
+    assert.equal(init.headers["X-DashScope-Async"], undefined);
     const body = JSON.parse(String(init.body));
     assert.equal(body.model, "qwen-image-plus");
-    assert.equal(body.size, "1024x1024");
-    assert.equal(body.n, 1);
-    assert.equal(body.response_format, undefined);
+    assert.equal(body.parameters.size, "2048*2048");
+    assert.equal(body.parameters.n, 1);
+    assert.equal(body.parameters.watermark, false);
+    assert.equal(body.input.messages[0].content[0].image, undefined);
     assert.equal(body.image, undefined);
-    assert.equal(body.prompt_extend, true);
-    assert.equal(String(body.size).includes("*"), false);
-    assert.deepEqual(Object.keys(body).sort(), ["model", "n", "prompt", "prompt_extend", "size"]);
+    assert.equal(body.prompt, undefined);
     const raw = JSON.stringify(body);
     assert.equal(raw.includes("/demo/"), false);
     assert.equal(raw.includes("localhost"), false);
-    return jsonResponse(200, { data: [{ url: imageUrl }] });
+    return jsonResponse(200, { output: { choices: [{ message: { content: [{ image: imageUrl }] } }] } });
   });
   assert.equal(compat.url, imageUrl);
 
@@ -189,29 +190,30 @@ async function check(executeImage) {
     IMAGE_API_BASE: "https://dashscope.aliyuncs.com/compatible-mode/v1/images/generations",
     IMAGE_MODEL: "qwen-image-plus",
   }, async (url, init) => {
-    assert.equal(String(url), "https://dashscope.aliyuncs.com/compatible-mode/v1/images/generations");
+    assert.equal(String(url), "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation");
+    assert.equal(String(url).includes("/images/generations"), false);
+    assert.equal(init.headers["X-DashScope-Async"], undefined);
     const body = JSON.parse(String(init.body));
+    const text = body.input.messages[0].content[0].text;
     const raw = JSON.stringify(body);
-    assert.equal(body.size, "1024x1024");
-    assert.equal(body.n, 1);
-    assert.equal(body.prompt_extend, true);
-    assert.equal(body.response_format, undefined);
+    assert.equal(body.parameters.size, "2048*2048");
+    assert.equal(body.parameters.n, 1);
     assert.equal(body.image, undefined);
     assert.equal(body.image_url, undefined);
     assert.equal(body.negative_prompt, undefined);
-    assert.equal(body.messages, undefined);
-    assert.equal(body.input, undefined);
+    assert.equal(body.prompt, undefined);
+    assert.equal(body.input.messages[0].content[0].image, undefined);
     assert.equal(raw.includes("http://127.0.0.1:3000/products/a.png"), false);
     assert.equal(raw.includes("127.0.0.1"), false);
     assert.equal(raw.includes("http://"), false);
     assert.equal(raw.includes("https://"), false);
     assert.equal(raw.includes("/products/"), false);
     assert.equal(raw.includes("/demo/"), false);
-    assert.equal(body.prompt.includes("客厅"), true);
-    assert.equal(body.prompt.includes("米白布艺"), true);
-    assert.equal(body.prompt.includes("云朵双人沙发"), true);
-    assert.deepEqual(Object.keys(body).sort(), ["model", "n", "prompt", "prompt_extend", "size"]);
-    return jsonResponse(200, { data: [{ url: imageUrl }] });
+    assert.equal(text.includes("客厅"), true);
+    assert.equal(text.includes("米白布艺"), true);
+    assert.equal(text.includes("云朵双人沙发"), true);
+    assert.deepEqual(Object.keys(body.input.messages[0].content[0]).sort(), ["text"]);
+    return jsonResponse(200, { output: { choices: [{ message: { content: [{ image: imageUrl }] } }] } });
   });
   assert.equal(stripped.url, imageUrl);
 
@@ -220,12 +222,13 @@ async function check(executeImage) {
     IMAGE_API_BASE: "https://dashscope.aliyuncs.com/compatible-mode/v1",
     IMAGE_MODEL: "qwen-image-plus",
   }, async (url, init) => {
-    assert.equal(String(url), "https://dashscope.aliyuncs.com/compatible-mode/v1/images/generations");
+    assert.equal(String(url), "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation");
+    assert.equal(String(url).includes("/images/generations"), false);
+    assert.equal(init.headers["X-DashScope-Async"], undefined);
     const body = JSON.parse(String(init.body));
-    assert.equal(body.prompt_extend, true);
-    assert.equal(body.size, "1024x1024");
-    assert.deepEqual(Object.keys(body).sort(), ["model", "n", "prompt", "prompt_extend", "size"]);
-    return jsonResponse(200, { data: [{ url: imageUrl }] });
+    assert.equal(body.parameters.size, "2048*2048");
+    assert.equal(Object.keys(body.input.messages[0].content[0]).join(","), "text");
+    return jsonResponse(200, { output: { choices: [{ message: { content: [{ image: imageUrl }] } }] } });
   });
   assert.equal(compatBase.url, imageUrl);
 
@@ -296,12 +299,13 @@ async function check(executeImage) {
     IMAGE_MODEL: "qwen-image-plus",
   }, async (url, init) => {
     assert.equal(String(url).includes("chat/completions"), false);
-    assert.equal(String(url), "https://dashscope.aliyuncs.com/compatible-mode/v1/images/generations");
+    assert.equal(String(url).includes("/images/generations"), false);
+    assert.equal(String(url), "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation");
+    assert.equal(init.headers["X-DashScope-Async"], undefined);
     const body = JSON.parse(String(init.body));
-    assert.equal(body.prompt_extend, true);
-    assert.equal(body.size, "1024x1024");
-    assert.deepEqual(Object.keys(body).sort(), ["model", "n", "prompt", "prompt_extend", "size"]);
-    return jsonResponse(200, { data: [{ url: imageUrl }] });
+    assert.equal(body.parameters.size, "2048*2048");
+    assert.equal(Object.keys(body.input.messages[0].content[0]).join(","), "text");
+    return jsonResponse(200, { output: { choices: [{ message: { content: [{ image: imageUrl }] } }] } });
   });
   assert.equal(chatBase.url, imageUrl);
 
@@ -346,7 +350,7 @@ async function check(executeImage) {
   assert.equal(pathError.label.length <= 160, true);
 
   await testQwenImageApiReference(executeImage);
-  await testQwenImageCompatibleMode(executeImage);
+  await testQwenImageGenerationAndEditingApiReference(executeImage);
 
   const capped = await executeImage(product, ready, async () => jsonResponse(400, {
     message: "x".repeat(400),
@@ -401,20 +405,57 @@ async function testQwenImageApiReference(executeImage) {
   });
 }
 
-async function testQwenImageCompatibleMode(executeImage) {
+async function testQwenImageGenerationAndEditingApiReference(executeImage) {
   const doc = `Qwen Image Generation and Editing API Reference ${compatibleImageDoc}`;
-  const bases = [
+  const native = "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation";
+  const dashBases = [
     "https://dashscope.aliyuncs.com/compatible-mode/v1",
     "https://dashscope.aliyuncs.com/compatible-mode/v1/images/generations",
     "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+    "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+    native,
   ];
-  for (const base of bases) {
+  for (const base of dashBases) {
+    const expected = base.includes("dashscope-intl.aliyuncs.com")
+      ? "https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
+      : native;
     await executeImage(product, {
       ...ready,
       IMAGE_API_BASE: base,
       IMAGE_MODEL: "qwen-image-plus",
     }, async (url, init) => {
-      assert.equal(String(url), "https://dashscope.aliyuncs.com/compatible-mode/v1/images/generations", doc);
+      assert.equal(String(url), expected, doc);
+      assert.equal(String(url).includes("/images/generations"), false, doc);
+      assert.equal(String(url).includes("/chat/completions"), false, doc);
+      assert.equal((String(url).match(/multimodal-generation\/generation/g) || []).length, 1, doc);
+      docHeaders(init, doc);
+      const body = JSON.parse(String(init.body));
+      assert.equal(body.model, "qwen-image-plus", doc);
+      assert.equal(body.input.messages.length, 1, doc);
+      assert.equal(body.input.messages[0].role, "user", doc);
+      assert.equal(Object.keys(body.input.messages[0].content[0]).join(","), "text", doc);
+      assert.equal(body.parameters.size, "2048*2048", doc);
+      assert.equal(body.parameters.n, 1, doc);
+      assert.equal(body.parameters.watermark, false, doc);
+      assert.equal(body.prompt, undefined, doc);
+      assert.equal(body.image, undefined, doc);
+      assert.deepEqual(Object.keys(body).sort(), ["input", "model", "parameters"], doc);
+      return jsonResponse(200, { output: { choices: [{ message: { content: [{ image: imageUrl }] } }] } });
+    });
+  }
+  const maasImage = "https://something.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/images/generations";
+  const maasBases = [
+    "https://something.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+    maasImage,
+    "https://something.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/chat/completions",
+  ];
+  for (const base of maasBases) {
+    await executeImage(product, {
+      ...ready,
+      IMAGE_API_BASE: base,
+      IMAGE_MODEL: "qwen-image-plus",
+    }, async (url, init) => {
+      assert.equal(String(url), maasImage, doc);
       assert.equal(String(url).includes("/chat/completions"), false, doc);
       assert.equal((String(url).match(/\/images\/generations/g) || []).length, 1, doc);
       docHeaders(init, doc);
