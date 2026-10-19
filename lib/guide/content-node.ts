@@ -73,6 +73,10 @@ export async function runContentNode(session, request) {
     copyStyle: request?.momentsInput?.copyStyle || session.record.materialInput?.copyStyle || "warm",
     audience: request?.momentsInput?.audience || session.record.materialInput?.audience || "first_home",
   };
+  const readyForProduct = Boolean(confirmedId && facts && facts.id === confirmedId);
+  const owners = [session.record.pieceProductId, session.record.material?.usedProductId].filter(Boolean);
+  if (readyForProduct && owners.some((id) => id !== confirmedId)) resetPieceCalls(session.id);
+  if (readyForProduct) session.record.pieceProductId = confirmedId;
   if (request?.newPiece) resetPieceCalls(session.id);
   const gate = consumeCall(session.id, "content", LIMITS.content);
   if (!gate.ok) {
