@@ -6,7 +6,7 @@ import { buildPromoPlan } from "./promos";
 import { FAILURE_TEXT } from "./limits";
 
 const LIGHT_COLORS = ['米白', '浅灰'];
-const CATEGORIES = ['沙发', '餐桌', '休闲椅', '床架', '柜'];
+const CATEGORY_PHRASES = ["床头柜", "电视柜", "斗柜", "衣柜", "书柜", "鞋柜", "橱柜", "餐边柜", "柜子", "休闲椅", "床架", "椅子", "餐桌", "沙发", "床", "柜"];
 const FORBIDDEN = ['终身保修', '免费送装', '环保', '舒适', '终身质保'];
 
 const STYLES = ["北欧", "日式", "现代", "轻奢", "简约", "自然", "复古", "中式"];
@@ -105,7 +105,7 @@ export function searchProducts(constraints, roles) {
 function matches(item, constraints, roles) {
   if (isHard(roles, "budget_max_cny") && constraints.budget_max_cny != null && item.price_cny > constraints.budget_max_cny) return false;
   if (isHard(roles, "width_max_cm") && constraints.width_max_cm != null && item.width_cm > constraints.width_max_cm) return false;
-  if (isHard(roles, "category") && constraints.category && item.category !== constraints.category) return false;
+  if (isHard(roles, "category") && constraints.category && !categoryFits(item, constraints.category)) return false;
   if (isHard(roles, "color") && constraints.color === "浅色" && !LIGHT_COLORS.includes(item.color)) return false;
   if (isHard(roles, "color") && constraints.color && constraints.color !== "浅色" && item.color !== constraints.color) return false;
   if (isHard(roles, "exclude_material") && constraints.exclude_material && item.material === constraints.exclude_material) return false;
@@ -253,8 +253,8 @@ function writeConstraint(next, roles, change, strict) {
   if (change.clear) next.constraints[field] = null;
   else if (change.value != null && String(change.value).trim() !== "") {
     if (field === "budget_max_cny" || field === "width_max_cm") {
-      const amount = Number(change.value);
-      if (!Number.isFinite(amount)) return "bad_constraint_value";
+      const amount = field === "width_max_cm" ? readWidth(change.value) : readAmount(change.value);
+      if (amount == null || !Number.isFinite(amount)) return "bad_constraint_value";
       next.constraints[field] = amount;
     } else next.constraints[field] = String(change.value).trim();
   } else if (strict) return "bad_constraint_value";
@@ -338,16 +338,94 @@ function clearsCategory(text) {
   return /品类不限|不限品类/.test(text);
 }
 
+function scaleAmount(value, unit) {
+  const mark = String(unit || "");
+  const factor = mark === "万" ? 10000 : mark === "千" || mark.toLowerCase() === "k" ? 1000 : mark === "百" ? 100 : 1;
+  return Math.round(value * factor);
+}
+
+function chineseInteger(token) {
+  const digits = { 零: 0, 〇: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
+  const small = { 十: 10, 百: 100, 千: 1000 };
+  let result = 0;
+  let section = 0;
+  let number = 0;
+  for (const ch of token) {
+    if (Object.prototype.hasOwnProperty.call(digits, ch)) number = digits[ch];
+    else if (Object.prototype.hasOwnProperty.call(small, ch)) {
+      section += (number || 1) * small[ch];
+      number = 0;
+    } else if (ch === "万") {
+      result += ((section + number) || 1) * 10000;
+      section = 0;
+      number = 0;
+    } else return null;
+  }
+  const total = result + section + number;
+  return total > 0 ? total : null;
+}
+
+function readAmount(text) {
+  const source = String(text ?? "");
+  const matches = [...source.matchAll(/(\d+(?:\.\d+)?)(?:\s*([万千百kK]))?/g)];
+  if (matches.length) {
+    if (matches.length > 1 && matches.every((item) => item[2])) {
+      return matches.reduce((sum, item) => sum + scaleAmount(Number(item[1]), item[2]), 0);
+    }
+    const last = matches[matches.length - 1];
+    return scaleAmount(Number(last[1]), last[2]);
+  }
+  const spoken = source.match(/[零〇一二三四五六七八九十百千万两]+/);
+  if (!spoken || !/[零〇一二三四五六七八九两十]/.test(spoken[0])) return null;
+  return chineseInteger(spoken[0]);
+}
+
+function readWidth(text) {
+  const source = String(text ?? "").trim();
+  if (!source) return null;
+  if (/一米八/.test(source)) return 180;
+  if (/一米六/.test(source)) return 160;
+  if (/一米五/.test(source)) return 150;
+  if (/两米|二米/.test(source)) return 200;
+  const matched = source.match(/(\d+(?:\.\d+)?)\s*(厘米|cm|米|m)?/i);
+  if (!matched) return null;
+  const amount = Number(matched[1]);
+  if (!Number.isFinite(amount)) return null;
+  const unit = String(matched[2] || "").toLowerCase();
+  if (unit === "米" || unit === "m") return Math.round(amount * 100);
+  return amount;
+}
+
+function canonicalCategory(phrase) {
+  if (phrase === "椅子") return "休闲椅";
+  if (phrase === "床") return "床架";
+  return phrase;
+}
+
+function categoryPhrase(part) {
+  let phrase = "";
+  for (const item of CATEGORY_PHRASES) {
+    if (part.includes(item) && item.length > phrase.length) phrase = item;
+  }
+  return phrase ? canonicalCategory(phrase) : null;
+}
+
+export function categoryFits(item, wanted) {
+  if (!wanted) return true;
+  if (item.category === wanted || item.name.includes(wanted)) return true;
+  if (String(wanted).includes(item.category)) {
+    const named = catalog.some((product) => product.category === item.category && product.name.includes(wanted));
+    return named ? item.name.includes(wanted) : true;
+  }
+  return false;
+}
+
 function parseBudget(text) {
   let found = null;
   for (const part of splitParts(text)) {
     if (!/预算|元/.test(part) || /厘米/.test(part)) continue;
-    const digits = part.match(/(\d+(?:\.\d+)?)/);
-    if (digits) found = Number(digits[1]);
-    else if (/三千/.test(part)) found = 3000;
-    else if (/两千/.test(part)) found = 2000;
-    else if (/一千/.test(part)) found = 1000;
-    else if (/五百/.test(part)) found = 500;
+    const amount = readAmount(part);
+    if (amount != null) found = amount;
   }
   return found;
 }
@@ -355,16 +433,8 @@ function parseBudget(text) {
 function parseCategory(text) {
   let found = null;
   for (const part of splitParts(text)) {
-    if (/柜/.test(part)) found = '柜';
-    else if (/床架|床/.test(part)) found = '床架';
-    else if (/休闲椅|椅子/.test(part)) found = '休闲椅';
-    else if (/餐桌/.test(part)) found = '餐桌';
-    else if (/沙发/.test(part)) found = '沙发';
-    else {
-      for (const category of CATEGORIES) {
-        if (part.includes(category)) found = category;
-      }
-    }
+    const phrase = categoryPhrase(part);
+    if (phrase) found = phrase;
   }
   return found;
 }

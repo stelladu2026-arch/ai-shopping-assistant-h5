@@ -1,6 +1,7 @@
 // @ts-nocheck
 import catalog from "../../data/catalog.json";
 import promotions from "../../data/promotions.json";
+import { categoryFits } from "./engine";
 
 const LIGHT = ['米白', '浅灰'];
 const TODAY = '2026-10-06';
@@ -22,7 +23,7 @@ export function reflect(state, confirmedFacts) {
       checks.push({target: id, name: '宽度', ok: product.width_cm <= constraints.width_max_cm, detail: `${product.width_cm}厘米，上限${constraints.width_max_cm}厘米`});
     }
     if (constraints.category) {
-      checks.push({target: id, name: '品类', ok: product.category === constraints.category, detail: product.category});
+      checks.push({target: id, name: '品类', ok: categoryFits(product, constraints.category), detail: product.category});
     }
     const colorHard = state?.constraint_roles?.color !== "prefer";
     if (constraints.color && !colorHard) {
