@@ -3,7 +3,7 @@ import promotions from "../../data/promotions.json";
 import { confirmFromCatalog, confirmProduct, productById, resolveConstraintSearch } from "./engine";
 import { degradeStoreReason, formatStoreHit, MISS_TEXT, retrieve, storeExcerptConflicts } from "./knowledge";
 import { buildPromoPlan } from "./promos";
-import { consumeCall, loadStep, saveStep } from "./db";
+import { consumeCall, loadStep, resetPieceCalls, saveStep } from "./db";
 import { LIMITS, capText } from "./limits";
 
 const STEP = "product_decision";
@@ -144,6 +144,10 @@ export async function runProductDecision(session, request) {
       if (session.record.material?.bodyText && previousId && previousId !== facts?.id) {
         markPending(session, "确认的商品已更换，上一套文案和配图待核对。下一步：点重新生成素材。");
       }
+      const nextId = facts?.id || settled.state.confirmed_product_id || null;
+      const countedFor = session.record.pieceProductId || previousId || null;
+      if (nextId && countedFor && countedFor !== nextId) resetPieceCalls(session.id);
+      if (nextId) session.record.pieceProductId = nextId;
       saveStep(session.id, STEP, {
         status: "completed",
         input: { intent: "confirm", productId: request.productId, constraints: session.record.state.constraints },
