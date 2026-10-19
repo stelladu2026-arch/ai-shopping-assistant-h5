@@ -18,7 +18,7 @@ export function GuideTurnCard({ data, disabled, onAction }: GuideTurnCardProps) 
     constraints?.width_max_cm != null ? `宽度${constraints.width_max_cm}厘米` : "",
     constraints?.category ? `品类${constraints.category}` : "",
     constraints?.color ? `颜色${constraints.color}` : "",
-    constraints?.exclude_material ? `排除${constraints.exclude_material}` : "",
+    constraints?.exclude_material ? `不要${constraints.exclude_material}` : "",
   ].filter(Boolean);
 
   const replacing = Boolean(data.offerSwitch && data.confirmedId);

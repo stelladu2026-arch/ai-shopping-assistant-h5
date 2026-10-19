@@ -1,6 +1,6 @@
 import "./register-ts.mjs";
 import assert from "node:assert/strict";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -8,6 +8,32 @@ process.env.GUIDE_SQLITE_FILE = path.join(mkdtempSync(path.join(tmpdir(), "edit-
 
 const { applyTurn, createState: h5Create, editConstraint: h5Edit } = await import("../server/guide.mjs");
 const { guideAct } = await import("../lib/guide/session.ts");
+const { appliedLead, probeLead } = await import("../lib/guide/engine.ts");
+
+const tagsUi = readFileSync(new URL("../components/chat/guide/ConstraintTags.tsx", import.meta.url), "utf8");
+for (const banned of ["必须满足", "优先满足", "优先考虑", "去除条件", "改为优先", "改为必须"]) {
+  assert.equal(tagsUi.includes(banned), false, banned);
+}
+assert.match(tagsUi, /不要/);
+assert.match(tagsUi, /保存/);
+assert.match(tagsUi, /取消/);
+assert.match(tagsUi, /去掉/);
+assert.match(tagsUi, /编辑/);
+assert.match(tagsUi, /可放宽/);
+assert.match(tagsUi, /DialogContent/);
+assert.match(tagsUi, /data-constraint-strip/);
+assert.match(tagsUi, /action: "edit-constraint", changes, revision/);
+assert.match(tagsUi, /\$\{fieldName\(tag\.field\)\} \$\{tag\.value\}`\)\.join\(" · "\)/);
+assert.equal(/h-11 min-w-0 flex-1/.test(tagsUi), false);
+assert.equal(tagsUi.includes(">元<"), false);
+assert.equal(tagsUi.includes("厘米"), false);
+assert.equal(tagsUi.includes("h-[34px]"), false);
+const confirmLead = probeLead({ needsConfirm: true, options: [{ label: "颜色 浅色" }, { label: "风格 自然" }] });
+assert.equal(confirmLead.includes("必须满足"), false);
+assert.equal(confirmLead.includes("优先满足"), false);
+const relaxed = appliedLead({ label: "颜色 浅色" });
+assert.match(relaxed, /可放宽/);
+assert.equal(relaxed.includes("优先考虑"), false);
 
 function h5(text, state) {
   const step = applyTurn(state || h5Create(), text, state ? state.revision : 0);
@@ -60,6 +86,11 @@ await guideAct({ action: "reset", sessionId: sid });
 let turn = await guideAct({ action: "turn", sessionId: sid, text: "只看沙发，预算3000元，不要皮质" });
 assert.equal(turn.structured.constraints.budget_max_cny, 3000);
 assert.equal(turn.structured.constraints.exclude_material, "皮质");
+assert.deepEqual(
+  turn.structured.constraintTags.map((tag) => tag.label),
+  ["预算 3000元", "品类 沙发", "不要 皮质"],
+);
+assert.equal(turn.structured.constraintTags.some((tag) => /必须|优先|去除/.test(tag.label)), false);
 assert.equal(turn.structured.candidateIds.includes("S03"), false);
 assert.equal(turn.structured.candidateIds.includes("S04"), false);
 turn = await guideAct({ action: "turn", sessionId: sid, text: "预算改成5000", revision: turn.structured.revision });
@@ -130,11 +161,66 @@ assert.equal(policy.structured.constraints.budget_max_cny, 3000);
 assert.equal(policy.structured.constraints.color, "浅色");
 assert.equal(policy.structured.constraints.exclude_material, "皮质");
 
+const flowId = "edit_then_confirm";
+await guideAct({ action: "reset", sessionId: flowId });
+let flow = await guideAct({ action: "turn", sessionId: flowId, text: "只看沙发，预算3000元，不要皮质" });
+flow = await guideAct({ action: "edit-constraint", sessionId: flowId, field: "budget_max_cny", value: "5000", revision: flow.structured.revision });
+flow = await guideAct({ action: "edit-constraint", sessionId: flowId, field: "exclude_material", clear: true, revision: flow.structured.revision });
+const pickedProduct = flow.structured.products.find((item) => item.name === "林间三人沙发");
+assert.equal(pickedProduct.price_cny, 3299);
+const chosen = await guideAct({ action: "confirm", sessionId: flowId, productId: pickedProduct.id, revision: flow.structured.revision });
+assert.equal(chosen.structured.confirmedId, pickedProduct.id);
+assert.equal(String(chosen.leadText || "").includes("已达本次上限"), false);
+const asked = await guideAct({ action: "turn", sessionId: flowId, text: "沙发质保多久", revision: chosen.structured.revision });
+assert.equal(asked.structured.confirmedId, pickedProduct.id);
+assert.equal(asked.structured.constraints.category, "沙发");
+assert.equal(asked.structured.constraints.budget_max_cny, 5000);
+assert.equal(asked.structured.constraints.exclude_material, null);
+
 const cheapId = "edit_cheap";
 await guideAct({ action: "reset", sessionId: cheapId });
 let cheap = await guideAct({ action: "turn", sessionId: cheapId, text: "只看沙发，预算3000元" });
 cheap = await guideAct({ action: "turn", sessionId: cheapId, text: "便宜点", revision: cheap.structured.revision });
 assert.equal(cheap.structured.constraints.budget_max_cny, 3000);
 assert.match(cheap.leadText || "", /不会自行降低/);
+
+const batchBase = h5("只看沙发，预算3000元，不要皮质");
+const batchRev = batchBase.revision;
+const batchFailed = h5Edit(batchBase, { changes: [{ field: "budget_max_cny", value: "5000" }, { field: "category", value: "" }] }, batchRev);
+assert.equal(batchFailed.ok, false);
+assert.equal(batchFailed.state.constraints.budget_max_cny, 3000);
+assert.equal(batchFailed.state.constraints.exclude_material, "皮质");
+assert.equal(batchFailed.state.revision, batchRev);
+const batched = h5Edit(batchBase, {
+  changes: [
+    { field: "budget_max_cny", value: "5000" },
+    { field: "exclude_material", clear: true },
+  ],
+}, batchRev);
+assert.equal(batched.ok, true);
+assert.equal(batched.state.revision, batchRev + 1);
+assert.equal(batched.state.constraints.budget_max_cny, 5000);
+assert.equal(batched.state.constraints.category, "沙发");
+assert.equal(batched.state.constraints.exclude_material, null);
+assert.equal(batched.state.candidate_ids.includes("S04"), true);
+assert.equal(batched.state.candidate_ids.includes("S03"), true);
+
+const batchId = "edit_batch";
+await guideAct({ action: "reset", sessionId: batchId });
+let batchTurn = await guideAct({ action: "turn", sessionId: batchId, text: "只看沙发，预算3000元，不要皮质" });
+batchTurn = await guideAct({
+  action: "edit-constraint",
+  sessionId: batchId,
+  changes: [
+    { field: "budget_max_cny", value: "5000" },
+    { field: "exclude_material", clear: true },
+  ],
+  revision: batchTurn.structured.revision,
+});
+assert.equal(batchTurn.structured.constraints.budget_max_cny, 5000);
+assert.equal(batchTurn.structured.constraints.category, "沙发");
+assert.equal(batchTurn.structured.constraints.exclude_material, null);
+assert.equal(batchTurn.structured.candidateIds.includes("S04"), true);
+assert.equal(batchTurn.structured.candidateIds.includes("S03"), true);
 
 console.log("ok edit constraints");

@@ -1,6 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 
 interface ConstraintTag {
   field: string;
@@ -33,106 +36,167 @@ interface ConstraintTagsProps {
   onAction: (body: Record<string, unknown>) => void;
 }
 
-function TagEditor({
-  tag,
-  disabled,
-  revision,
-  onAction,
-}: {
-  tag: ConstraintTag;
-  disabled?: boolean;
-  revision: number;
-  onAction: (body: Record<string, unknown>) => void;
-}) {
-  const numeric = tag.field === "budget_max_cny" || tag.field === "width_max_cm";
-  const [draft, setDraft] = useState(String(tag.value));
-  useEffect(() => {
-    setDraft(String(tag.value));
-  }, [tag.field, tag.value]);
-  const nextStrength = tag.strength === "hard" ? "prefer" : "hard";
-  const dirty = draft.trim() !== "" && draft.trim() !== String(tag.value);
+interface Draft {
+  field: string;
+  name: string;
+  value: string;
+  original: string;
+  numeric: boolean;
+  relaxable: boolean;
+  removed: boolean;
+}
 
-  return (
-    <div className="flex max-w-full flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-2 py-2">
-      <span className="text-[0.78rem] font-semibold text-slate-800">{tag.label}</span>
-      <input
-        value={draft}
-        disabled={disabled}
-        inputMode={numeric ? "numeric" : "text"}
-        aria-label={`修改${tag.label}`}
-        onChange={(event) => setDraft(event.target.value)}
-        className="h-11 w-24 rounded-lg border border-slate-200 px-2 text-[0.8rem]"
-      />
-      <button
-        type="button"
-        disabled={disabled || !dirty}
-        onClick={() => onAction({ action: "edit-constraint", field: tag.field, value: draft.trim(), strength: tag.strength, revision })}
-        className="min-h-11 rounded-full bg-brand-600 px-3 text-[0.78rem] font-bold text-white disabled:opacity-40"
-      >
-        保存
-      </button>
-      <button
-        type="button"
-        disabled={disabled}
-        aria-label={`去掉${tag.label}`}
-        onClick={() => onAction({ action: "edit-constraint", field: tag.field, clear: true, revision })}
-        className="min-h-11 rounded-full border border-slate-200 px-3 text-[0.78rem] font-bold text-slate-700"
-      >
-        去掉
-      </button>
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => onAction({ action: "edit-constraint", field: tag.field, strength: nextStrength, revision })}
-        className="min-h-11 rounded-full px-2 text-[0.72rem] font-semibold text-slate-500"
-      >
-        {tag.strength === "hard" ? "改为优先" : "改为必须"}
-      </button>
-    </div>
-  );
+function fieldName(field: string) {
+  if (field === "budget_max_cny") return "预算";
+  if (field === "width_max_cm") return "尺寸";
+  if (field === "category") return "品类";
+  if (field === "color") return "颜色";
+  if (field === "exclude_material") return "不要";
+  if (field === "material") return "材质";
+  if (field === "style") return "风格";
+  return "条件";
+}
+
+function summaryText(tags: ConstraintTag[]) {
+  return tags.map((tag) => `${fieldName(tag.field)} ${tag.value}`).join(" · ");
+}
+
+function draftsFrom(tags: ConstraintTag[]): Draft[] {
+  return tags.map((tag) => ({
+    field: tag.field,
+    name: fieldName(tag.field),
+    value: String(tag.value),
+    original: String(tag.value),
+    numeric: tag.field === "budget_max_cny" || tag.field === "width_max_cm",
+    relaxable: tag.strength === "prefer",
+    removed: false,
+  }));
 }
 
 export function ConstraintTags({ tags, probe, disabled, revision, onAction }: ConstraintTagsProps) {
-  if (!tags.length && !probe?.count) return null;
-  const hard = tags.filter((tag) => tag.strength === "hard");
-  const prefer = tags.filter((tag) => tag.strength === "prefer");
+  const [open, setOpen] = useState(false);
+  const [drafts, setDrafts] = useState<Draft[]>([]);
+  const [error, setError] = useState("");
+  const firstInput = useRef<HTMLInputElement>(null);
+  if (!tags.length && !probe?.needsConfirm) return null;
+
+  function openEditor() {
+    setDrafts(draftsFrom(tags));
+    setError("");
+    setOpen(true);
+  }
+
+  function updateDraft(field: string, patch: Partial<Draft>) {
+    setDrafts((current) => current.map((item) => (item.field === field ? { ...item, ...patch } : item)));
+  }
+
+  function save() {
+    const changes: Array<{ field: string; value?: string; clear?: boolean }> = [];
+    for (const draft of drafts) {
+      if (draft.removed) {
+        changes.push({ field: draft.field, clear: true });
+        continue;
+      }
+      const value = draft.value.trim();
+      if (!value) {
+        setError("请填写每一项，或点去掉。");
+        return;
+      }
+      if (draft.numeric && !Number.isFinite(Number(value))) {
+        setError("预算和尺寸请填数字。");
+        return;
+      }
+      if (value !== draft.original) changes.push({ field: draft.field, value });
+    }
+    if (changes.length) onAction({ action: "edit-constraint", changes, revision });
+    setOpen(false);
+  }
 
   return (
-    <section className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
-      <p className="text-[0.78rem] font-bold text-slate-900">识别出的条件</p>
-      <p className="text-[0.72rem] leading-relaxed text-slate-500">必须满足会用来筛选。优先考虑只影响排序。系统不会未经确认放宽必须满足的条件。</p>
-      <div>
-        <p className="text-[0.75rem] font-bold text-slate-800">必须满足</p>
-        <div className="mt-1 flex flex-wrap gap-2">
-          {hard.length ? hard.map((tag) => (
-            <TagEditor key={tag.field} tag={tag} disabled={disabled} revision={revision} onAction={onAction} />
-          )) : <span className="text-[0.75rem] text-slate-500">还没有必须满足的条件。</span>}
+    <section className="space-y-2">
+      {tags.length ? (
+        <div data-constraint-strip className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <p data-constraint-summary className="m-0 text-[13px] font-medium leading-5 text-slate-800">{summaryText(tags)}</p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={disabled}
+            onClick={openEditor}
+            className="h-7 rounded-full px-2.5 text-xs"
+          >
+            编辑
+          </Button>
         </div>
-      </div>
-      <div>
-        <p className="text-[0.75rem] font-bold text-slate-800">优先考虑</p>
-        <div className="mt-1 flex flex-wrap gap-2">
-          {prefer.length ? prefer.map((tag) => (
-            <TagEditor key={tag.field} tag={tag} disabled={disabled} revision={revision} onAction={onAction} />
-          )) : <span className="text-[0.75rem] text-slate-500">还没有优先考虑的条件。</span>}
-        </div>
-      </div>
+      ) : null}
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent
+          className="gap-3 p-4"
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            firstInput.current?.focus();
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>识别出的条件</DialogTitle>
+            <DialogDescription className="sr-only">修改已读取的条件，保存后一起重新筛选。</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            {drafts.map((draft, index) => (
+              <div key={draft.field} data-constraint-field={draft.field} className={draft.removed ? "flex items-center gap-1.5 opacity-45" : "flex items-center gap-1.5"}>
+                <label htmlFor={`constraint-edit-${draft.field}`} className="w-8 shrink-0 text-xs font-semibold text-slate-900">{draft.name}</label>
+                <Input
+                  ref={index === 0 ? firstInput : undefined}
+                  id={`constraint-edit-${draft.field}`}
+                  value={draft.value}
+                  disabled={disabled || draft.removed}
+                  inputMode={draft.numeric ? "numeric" : "text"}
+                  aria-label={draft.name}
+                  onChange={(event) => updateDraft(draft.field, { value: event.target.value })}
+                  className="h-9 min-w-0 flex-1 rounded-lg px-2 text-[13px] shadow-none"
+                />
+                {draft.relaxable ? <span className="shrink-0 text-[11px] font-medium text-slate-400">可放宽</span> : null}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={disabled}
+                  aria-label={`${draft.removed ? "撤销" : "去掉"}${draft.name}`}
+                  onClick={() => updateDraft(draft.field, { removed: !draft.removed })}
+                  className="h-9 shrink-0 rounded-lg px-2 text-xs"
+                >
+                  {draft.removed ? "撤销" : "去掉"}
+                </Button>
+              </div>
+            ))}
+          </div>
+          {error ? <p className="text-xs font-medium text-orange-800">{error}</p> : null}
+          <div className="flex items-center justify-end gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={() => setOpen(false)} className="h-9 px-3 text-xs">
+              取消
+            </Button>
+            <Button type="button" size="sm" disabled={disabled} onClick={save} className="h-9 px-3 text-xs">
+              保存
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
       {probe?.needsConfirm ? (
-        <div className="rounded-lg bg-white px-3 py-3">
+        <div className="rounded-lg bg-slate-50 px-3 py-3">
           <p className="text-[0.8rem] font-semibold leading-relaxed text-slate-800">
-            这两项分别放宽都会查到商品。请确认放宽哪一项。预算、宽度、品类和排除材质保持必须满足。
+            放宽下面任一项都能查到商品。请点一项继续。
           </p>
           <div className="mt-2 space-y-2">
             {(probe.options || []).map((option) => (
-              <button
+              <Button
                 key={option.field}
                 type="button"
                 disabled={disabled}
                 onClick={() => onAction({ action: "accept-probe", field: option.field, revision })}
-                className="min-h-11 w-full rounded-xl bg-brand-600 text-[0.85rem] font-bold text-white"
+                className="h-11 w-full"
               >
                 放宽{option.label}
-              </button>
+              </Button>
             ))}
           </div>
         </div>

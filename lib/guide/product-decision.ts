@@ -121,9 +121,12 @@ function markPending(session, reviewNote) {
 
 export async function runProductDecision(session, request) {
   latestRetrieveTrace = null;
-  const gate = consumeCall(session.id, "product_decision", LIMITS.product_decision);
-  if (!gate.ok) {
-    return { ok: true, capped: true, reply: capText("product_decision") };
+  // 点选已经列出的商品不是一次新的筛选。次数用完之后，仍可以确认当前列表里的一件。
+  if (request?.intent !== "confirm") {
+    const gate = consumeCall(session.id, "product_decision", LIMITS.product_decision);
+    if (!gate.ok) {
+      return { ok: true, capped: true, reply: capText("product_decision") };
+    }
   }
   const previous = loadStep(session.id, STEP);
   const constraints = request?.constraints || session.record.state.constraints;
