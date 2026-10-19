@@ -18,7 +18,7 @@ const MAX_CUSTOM_LEN = 16;
 const MOMENTS_CTA_LABEL: Record<MomentsOutputKind, string> = {
   copy_only: "生成文案",
   image_only: "生成配图",
-  rich: "一键生成图文",
+  rich: "生成新图文",
 };
 
 interface MomentsInputPanelProps {

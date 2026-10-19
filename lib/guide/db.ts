@@ -262,6 +262,25 @@ export function resetCallBudgets(sessionId) {
   db.prepare("DELETE FROM clarify_counts WHERE session_id = ?").run(sessionId);
 }
 
+export function resetPieceCalls(sessionId) {
+  database()
+    .prepare("DELETE FROM call_counts WHERE session_id = ? AND kind IN ('content', 'image')")
+    .run(sessionId);
+}
+
+export function releaseCall(sessionId, kind) {
+  const db = database();
+  const row = db.prepare("SELECT used FROM call_counts WHERE session_id = ? AND kind = ?").get(sessionId, kind);
+  const used = Number(row?.used || 0);
+  if (used <= 1) {
+    db.prepare("DELETE FROM call_counts WHERE session_id = ? AND kind = ?").run(sessionId, kind);
+    return { ok: true, used: 0 };
+  }
+  const next = used - 1;
+  db.prepare("UPDATE call_counts SET used = ? WHERE session_id = ? AND kind = ?").run(next, sessionId, kind);
+  return { ok: true, used: next };
+}
+
 export function readCallCounts(sessionId) {
   const rows = database().prepare("SELECT kind, used FROM call_counts WHERE session_id = ?").all(sessionId);
   return Object.fromEntries(rows.map((row) => [row.kind, row.used]));

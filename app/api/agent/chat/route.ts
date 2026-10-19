@@ -10,14 +10,18 @@ export async function POST(req: Request) {
     customerId?: string;
     text?: string;
     momentsInput?: MomentsGenerationInput;
+    newPiece?: boolean;
   };
   if (partial.scene === "moments_marketing" && partial.momentsInput) {
-    const structured = await guideMaterial(partial.momentsInput, partial.sessionId || partial.customerId);
+    const structured = await guideMaterial(partial.momentsInput, partial.sessionId || partial.customerId, {
+      newPiece: partial.newPiece === true,
+    });
     const failed = structured.cardTitle === "素材没有生成";
+    const capped = structured.cardTitle === "已达本次上限";
     const payload: AgentChatResponseBody = {
       messageId: `material_${Date.now()}`,
       done: true,
-      leadText: failed ? structured.bodyText : "素材已生成，请核对后再复制发给顾客。",
+      leadText: failed || capped ? structured.bodyText : "素材已生成，请核对后再复制发给顾客。",
       structured,
     };
     return NextResponse.json(payload);

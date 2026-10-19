@@ -287,48 +287,12 @@ export function ChatPageClient() {
     [sessionId],
   );
 
-  const handleContinueMomentsSetup = useCallback(() => {
-    const assistantId = lastMomentsAssistantId;
-    if (!assistantId || sending) return;
-    const prev = messagesMomentsRef.current;
-    const idx = prev.findIndex((m) => m.id === assistantId);
-    if (idx < 1) return;
-    const userMsg = prev[idx - 1];
-    const assistant = prev[idx];
-    if (userMsg.role !== "user" || assistant.role !== "assistant" || !assistant.structured) return;
-    if (assistant.structured.scene !== "moments_marketing") return;
-
-    const snap =
-      userMsg.momentsSnapshot ?? {
-        ...momentsForm,
-        sellingPoints: [...momentsForm.sellingPoints],
-      };
-    const editorMsg: ChatMessage = {
-      id: id("minline"),
-      role: "user",
-      text: "",
-      momentsInlineEditor: true,
-      momentsSnapshot: {
-        ...defaultMomentsInput,
-        ...snap,
-        sellingPoints: [...(snap.sellingPoints ?? [])],
-      },
-    };
-    setMessagesMoments((p) => {
-      const cleaned = p.filter((m) => !m.momentsInlineEditor);
-      const i = cleaned.findIndex((m) => m.id === assistantId);
-      if (i < 0) return p;
-      return [...cleaned.slice(0, i + 1), editorMsg, ...cleaned.slice(i + 1)];
-    });
-    setMomentsForm(editorMsg.momentsSnapshot!);
-  }, [lastMomentsAssistantId, sending, momentsForm]);
-
-  const generateMoments = useCallback(async () => {
+  const startNewPiece = useCallback(async (snap: MomentsGenerationInput) => {
     if (!guideTurn?.confirmedFacts || sending) return;
-    const snap: MomentsGenerationInput = {
-      ...momentsForm,
+    const nextSnap: MomentsGenerationInput = {
+      ...snap,
       productName: guideTurn.confirmedFacts.name,
-      sellingPoints: [...momentsForm.sellingPoints],
+      sellingPoints: [...(snap.sellingPoints ?? [])],
     };
 
     setMomentsSetupSheetOpen(false);
@@ -337,11 +301,12 @@ export function ChatPageClient() {
       id: id("u"),
       role: "user",
       text: "",
-      momentsSnapshot: snap,
+      momentsSnapshot: nextSnap,
     };
 
-    const afterUser = [...messagesMomentsRef.current, userMsg];
+    const afterUser = [...messagesMomentsRef.current.filter((item) => !item.momentsInlineEditor), userMsg];
     setMessagesMoments(afterUser);
+    setMomentsForm(nextSnap);
     setSending(true);
 
     try {
@@ -349,7 +314,8 @@ export function ChatPageClient() {
         scene: "moments_marketing",
         messages: afterUser.map(toAgentPayload),
         sessionId,
-        momentsInput: snap,
+        momentsInput: nextSnap,
+        newPiece: true,
       });
       setMessagesMoments((p) => [
         ...p,
@@ -373,7 +339,19 @@ export function ChatPageClient() {
       setSending(false);
       if (sessionId) void loadGuide(sessionId);
     }
-  }, [momentsForm, sending, sessionId, guideTurn, loadGuide]);
+  }, [sending, sessionId, guideTurn, loadGuide]);
+
+  const handleContinueMomentsSetup = useCallback(() => {
+    const assistantId = lastMomentsAssistantId;
+    const prev = messagesMomentsRef.current;
+    const idx = assistantId ? prev.findIndex((item) => item.id === assistantId) : -1;
+    const previous = idx > 0 ? prev[idx - 1] : undefined;
+    void startNewPiece(previous?.momentsSnapshot ?? momentsForm);
+  }, [lastMomentsAssistantId, momentsForm, startNewPiece]);
+
+  const generateMoments = useCallback(() => {
+    void startNewPiece(momentsForm);
+  }, [momentsForm, startNewPiece]);
 
   const sendMomentsFollowUp = useCallback(async () => {
     const text = momentsFollowUpDraft.trim();
@@ -553,6 +531,7 @@ export function ChatPageClient() {
           messages: afterUser.map(toAgentPayload),
           sessionId,
           momentsInput: snap,
+          newPiece: true,
         });
         setMessagesMoments((p) => [
           ...p,
@@ -624,6 +603,7 @@ export function ChatPageClient() {
             messages: prefix.map(toAgentPayload),
             sessionId,
             momentsInput: snap,
+            newPiece: false,
           });
           setMessagesMoments((p) => {
             const i = p.findIndex((m) => m.id === loadingId);

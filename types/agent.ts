@@ -185,6 +185,8 @@ export interface AgentChatRequestBody {
   customerId?: string;
   /** 场景一：随请求提交的配置 */
   momentsInput?: MomentsGenerationInput;
+  /** 生成新图文：这一下是新的一套的第 1 次，不沿用上一套的次数 */
+  newPiece?: boolean;
   /** 场景二：多模态占位说明（如已选图片文件名） */
   attachmentNote?: string;
 }

@@ -77,8 +77,9 @@ try {
   assert.equal(disabledCalls, 0);
   assert.equal(disabled.ok, true);
   assert.equal(disabled.confirmedId, "S01");
-  assert.match(disabled.moments.bodyText, /现货速发/);
-  assert.match(disabled.moments.bodyText, /演示回放、待核对/);
+  assert.match(disabled.moments.bodyText, /云朵双人沙发/);
+  assert.match(disabled.moments.bodyText, /2699/);
+  assert.equal(disabled.moments.bodyText.includes("演示回放、待核对"), false);
   assert.equal(disabled.moments.generatedImageUrl, "");
   assert.equal(disabled.moments.imagePlaceholder, "没有调用生图接口");
   assert.equal(disabled.structured.confirmedId, "S01");
@@ -105,9 +106,9 @@ try {
   assert.equal(billed.ok, true);
   assert.equal(billed.confirmedId, "S01");
   assert.equal(billed.confirmedUnchanged, true);
-  assert.match(billed.moments.bodyText, /现货速发/);
   assert.match(billed.moments.bodyText, /云朵双人沙发/);
-  assert.match(billed.moments.bodyText, /演示回放、待核对/);
+  assert.match(billed.moments.bodyText, /2699/);
+  assert.equal(billed.moments.bodyText.includes("演示回放、待核对"), false);
   assert.equal(billed.moments.generatedImageUrl, "");
   assert.equal(billed.moments.imagePlaceholder, "生图接口返回 HTTP 429");
   assert.equal(billed.moments.imagePlaceholder.includes("演示回放"), false);
@@ -163,9 +164,9 @@ try {
   assert.equal(offline.moments.generatedImageUrl, imageUrl);
   assert.equal(offline.moments.imagePlaceholder || "", "");
   assert.match(offline.moments.bodyText, /云朵双人沙发/);
-  assert.match(offline.moments.bodyText, /现货速发/);
-  assert.match(offline.moments.bodyText, /演示回放、待核对/);
-  assert.equal(offline.moments.cardTitle, "演示回放、待核对");
+  assert.match(offline.moments.bodyText, /2699/);
+  assert.equal(offline.moments.bodyText.includes("演示回放、待核对"), false);
+  assert.equal(offline.moments.cardTitle, "待核对");
 
   const liveId = "image_url_live_quota";
   await readySession(liveId);
