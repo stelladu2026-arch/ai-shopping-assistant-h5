@@ -162,10 +162,11 @@ async function check(executeImage) {
     assert.equal(String(url), "https://dashscope.aliyuncs.com/compatible-mode/v1/images/generations");
     const body = JSON.parse(String(init.body));
     assert.equal(body.model, "qwen-image-plus");
-    assert.equal(body.size, "1328*1328");
+    assert.equal(body.size, "1024x1024");
     assert.equal(body.n, 1);
     assert.equal(body.response_format, undefined);
     assert.equal(body.image, undefined);
+    assert.equal(String(body.size).includes("*"), false);
     assert.deepEqual(Object.keys(body).sort(), ["model", "n", "prompt", "size"]);
     const raw = JSON.stringify(body);
     assert.equal(raw.includes("/demo/"), false);
@@ -203,7 +204,7 @@ async function check(executeImage) {
     assert.equal(body.input.messages[0].role, "user");
     assert.equal(body.input.messages[0].content[0].text.includes("云朵双人沙发"), true);
     assert.equal(body.input.messages[0].content[0].image, undefined);
-    assert.equal(body.parameters.size, "1328*1328");
+    assert.equal(body.parameters.size, "2048*2048");
     assert.equal(body.parameters.n, 1);
     assert.equal(body.parameters.watermark, false);
     assert.equal(body.input.prompt, undefined);
@@ -300,11 +301,90 @@ async function check(executeImage) {
   assert.equal(pathError.label.includes("image-test"), false);
   assert.equal(pathError.label.length <= 160, true);
 
+  await testQwenImageApiReference(executeImage);
+  await testQwenImageCompatibleMode(executeImage);
+
   const capped = await executeImage(product, ready, async () => jsonResponse(400, {
     message: "x".repeat(400),
   }));
   assert.equal(capped.label.includes("（/images/generations）"), true);
   assert.equal(capped.label.length <= 160, true);
+}
+
+const qwenImageDoc = "https://www.alibabacloud.com/help/en/model-studio/qwen-image-api";
+const compatibleImageDoc = "https://www.alibabacloud.com/help/en/model-studio/qwen-image-generation-and-editing-api-reference";
+
+function docHeaders(init, doc) {
+  assert.equal(init.headers["Content-Type"], "application/json", doc);
+  assert.equal(init.headers["X-DashScope-Async"], undefined, doc);
+  assert.equal(init.headers["X-DashScope-SSE"], undefined, doc);
+}
+
+async function testQwenImageApiReference(executeImage) {
+  const doc = `Qwen-Image API reference ${qwenImageDoc}`;
+  await executeImage(product, {
+    ...ready,
+    IMAGE_API_BASE: "https://dashscope.aliyuncs.com/api/v1",
+    IMAGE_MODEL: "qwen-image-plus",
+  }, async (url, init) => {
+    assert.equal(String(url), "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation", doc);
+    assert.equal(String(url).includes("text2image"), false, doc);
+    docHeaders(init, doc);
+    const body = JSON.parse(String(init.body));
+    assert.equal(body.model, "qwen-image-plus", doc);
+    assert.equal(body.input.messages.length, 1, doc);
+    assert.equal(body.input.messages[0].role, "user", doc);
+    assert.equal(Object.keys(body.input.messages[0].content[0]).join(","), "text", doc);
+    assert.equal(body.parameters.size, "2048*2048", doc);
+    assert.equal(body.parameters.n, 1, doc);
+    assert.equal(body.parameters.watermark, false, doc);
+    assert.equal(body.input.prompt, undefined, doc);
+    assert.deepEqual(Object.keys(body).sort(), ["input", "model", "parameters"], doc);
+    assert.deepEqual(Object.keys(body.parameters).sort(), ["n", "size", "watermark"], doc);
+    return jsonResponse(200, { output: { choices: [{ message: { content: [{ image: "https://example.com/a.png" }] } }] } });
+  });
+  await executeImage(product, {
+    ...ready,
+    IMAGE_API_BASE: "https://dashscope.aliyuncs.com/api/v1/chat/completions",
+    IMAGE_MODEL: "qwen-image-plus",
+  }, async (url, init) => {
+    assert.equal(String(url).includes("/chat/completions"), false, doc);
+    assert.equal(String(url), "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation", doc);
+    docHeaders(init, doc);
+    const body = JSON.parse(String(init.body));
+    assert.equal(body.parameters.size, "2048*2048", doc);
+    return jsonResponse(200, { output: { choices: [{ message: { content: [{ image: "https://example.com/a.png" }] } }] } });
+  });
+}
+
+async function testQwenImageCompatibleMode(executeImage) {
+  const doc = `Qwen Image Generation and Editing API Reference ${compatibleImageDoc}`;
+  const bases = [
+    "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    "https://dashscope.aliyuncs.com/compatible-mode/v1/images/generations",
+    "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+  ];
+  for (const base of bases) {
+    await executeImage(product, {
+      ...ready,
+      IMAGE_API_BASE: base,
+      IMAGE_MODEL: "qwen-image-plus",
+    }, async (url, init) => {
+      assert.equal(String(url), "https://dashscope.aliyuncs.com/compatible-mode/v1/images/generations", doc);
+      assert.equal(String(url).includes("/chat/completions"), false, doc);
+      assert.equal((String(url).match(/\/images\/generations/g) || []).length, 1, doc);
+      docHeaders(init, doc);
+      const body = JSON.parse(String(init.body));
+      assert.equal(body.model, "qwen-image-plus", doc);
+      assert.equal(body.size, "1024x1024", doc);
+      assert.equal(body.n, 1, doc);
+      assert.equal(String(body.size).includes("*"), false, doc);
+      assert.equal(body.image, undefined, doc);
+      assert.equal(body.input, undefined, doc);
+      assert.deepEqual(Object.keys(body).sort(), ["model", "n", "prompt", "size"], doc);
+      return jsonResponse(200, { data: [{ url: imageUrl }] });
+    });
+  }
 }
 
 await check(executeGuide);

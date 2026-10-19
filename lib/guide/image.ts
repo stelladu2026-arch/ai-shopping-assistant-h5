@@ -20,7 +20,9 @@ function dashscopeImageModel(model) {
   return /qwen|dashscope/i.test(String(model || ''));
 }
 
-function imageSize(model) {
+function imageSize(model, kind) {
+  if (kind === 'multimodal') return '2048*2048';
+  if (kind === 'compatible') return '1024x1024';
   if (dashscopeImageModel(model)) return '1328*1328';
   return '1024x1024'.replace(/x/gi, '*');
 }
@@ -58,15 +60,19 @@ function imageEndpoint(base, model) {
   try { parsed = new URL(trimmed); } catch { parsed = null; }
   const path = parsed ? parsed.pathname.replace(/\/+$/, '') : '';
   if (parsed && /\/images\/generations$/i.test(path)) {
-    return {url: parsed.origin + path + parsed.search, native: false, kind: 'openai'};
+    const kind = /compatible-mode/i.test(path) ? 'compatible' : 'openai';
+    return {url: parsed.origin + path + parsed.search, native: false, kind};
   }
-  if (!parsed && /\/images\/generations$/i.test(trimmed)) return {url: trimmed, native: false, kind: 'openai'};
+  if (!parsed && /\/images\/generations$/i.test(trimmed)) {
+    const kind = /compatible-mode/i.test(trimmed) ? 'compatible' : 'openai';
+    return {url: trimmed, native: false, kind};
+  }
   const compatible = /compatible-mode/i.test(parsed ? path : trimmed);
   if (compatible) {
     const source = parsed ? path : trimmed;
     const suffix = /\/compatible-mode$/i.test(source) ? '/v1/images/generations' : '/images/generations';
-    if (parsed) return {url: parsed.origin + path + suffix + parsed.search, native: false, kind: 'openai'};
-    return {url: trimmed + suffix, native: false, kind: 'openai'};
+    if (parsed) return {url: parsed.origin + path + suffix + parsed.search, native: false, kind: 'compatible'};
+    return {url: trimmed + suffix, native: false, kind: 'compatible'};
   }
   if (parsed && dashscopeHost(parsed.hostname)) {
     if (path === '/api/v1' || path.startsWith('/api/v1/')) {
@@ -75,7 +81,7 @@ function imageEndpoint(base, model) {
       }
       return {url: parsed.origin + '/api/v1/services/aigc/text2image/image-synthesis', native: true, kind: 'async'};
     }
-    if (path === '') return {url: parsed.origin + '/compatible-mode/v1/images/generations', native: false, kind: 'openai'};
+    if (path === '') return {url: parsed.origin + '/compatible-mode/v1/images/generations', native: false, kind: 'compatible'};
   }
   if (parsed) return {url: parsed.origin + (path || '') + '/images/generations' + parsed.search, native: false, kind: 'openai'};
   return {url: trimmed + '/images/generations', native: false, kind: 'openai'};
@@ -83,7 +89,7 @@ function imageEndpoint(base, model) {
 
 function imageBody(product, model, kind) {
   const prompt = furniturePrompt(product);
-  const size = imageSize(model);
+  const size = imageSize(model, kind);
   if (kind === 'multimodal') {
     return {model, input: {messages: [{role: 'user', content: [{text: prompt}]}]}, parameters: {size, n: 1, watermark: false}};
   }
