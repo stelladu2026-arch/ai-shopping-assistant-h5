@@ -113,9 +113,12 @@ try {
 const page = readFileSync(new URL("../app/chat/ChatPageClient.tsx", import.meta.url), "utf8");
 const panel = readFileSync(new URL("../components/chat/moments/MomentsInputPanel.tsx", import.meta.url), "utf8");
 const bubble = readFileSync(new URL("../components/chat/AssistantBubble.tsx", import.meta.url), "utf8");
+const feedback = readFileSync(new URL("../components/chat/GenerationFeedbackBar.tsx", import.meta.url), "utf8");
 const openBlank = sliceFn(page, "openBlankCopyCard", "handleContinueMomentsSetup");
 const continueFn = sliceFn(page, "handleContinueMomentsSetup", "generateMoments");
 const generateFn = sliceFn(page, "generateMoments", "sendMomentsFollowUp");
+const regenerateFn = sliceFn(page, "regenerateForAssistant", "runGuideAction");
+const regenButton = bubble.slice(Math.max(0, bubble.indexOf("重新生成素材") - 500), bubble.indexOf("重新生成素材"));
 
 assert.match(openBlank, /resetToBlankCopyCard\(/);
 assert.match(openBlank, /clearCopyReview\(/);
@@ -133,8 +136,18 @@ assert.match(page, /continueGenerateLabel/);
 assert.match(page, /choiceStatus=\{m\.momentsChoice === "pending" \? BLANK_COPY_STATUS : null\}/);
 assert.match(page, /!showingBlankCopyCard/);
 assert.match(panel, /data-copy-card=\{choiceStatus \? "pending" : undefined\}/);
+assert.match(panel, /onClick=\{onGenerate\}/);
+assert.match(panel, /生成新图文/);
 assert.match(bubble, /重新生成素材/);
-assert.match(bubble, /onClick=\{onContinueGenerate \?\? onRegenerate\}/);
+assert.match(regenButton, /onClick=\{onRegenerate\}/);
+assert.equal(regenButton.includes("onContinueGenerate"), false);
+assert.equal(bubble.includes("onContinueGenerate ?? onRegenerate"), false);
+assert.match(feedback, /onClick=\{onContinueGenerate\}/);
+assert.match(feedback, /\{continueGenerateLabel\}/);
+assert.match(regenerateFn, /newPiece:\s*false/);
+assert.equal(regenerateFn.includes("openBlankCopyCard"), false);
+assert.equal(regenerateFn.includes("resetToBlankCopyCard"), false);
+assert.equal(regenerateFn.includes("appendMomentsPiece"), false);
 assert.equal(BLANK_COPY_STATUS, "待选择");
 
 console.log("ok blank copy card");
