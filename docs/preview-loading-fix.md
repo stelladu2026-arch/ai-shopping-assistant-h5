@@ -79,3 +79,16 @@
 
 参考：https://help.aliyun.com/zh/model-studio/error-code#error-url
 参考：https://help.aliyun.com/zh/model-studio/qwen-image-generation-and-editing-api-reference
+
+
+## 万相 wan2.6-image 的专用适配
+
+此前按通用 compatible-mode 根地址拼接 `/images/generations`，会把 `wan2.6-image` 发到不匹配的协议。现在官方阿里云域名下该模型固定采用 `/api/v1/services/aigc/image-generation/generation`，保留原业务空间与地域；同步完整地址也转换为此模型的异步调用。
+
+当前素材流程只有文字输入：请求使用 `input.messages`，开启 `parameters.enable_interleave=true`，同时设置 `n=1`、`max_images=1`、`size=1024*1024`。不发送本地商品图片路径，不自动切换模型。提交一次任务后通过 GET 查询结果，不重复创建任务；此前的90秒总等待上限仍有效。模型输出属于文字生成的商品示意图，不能据此保证与原商品照片一致。
+
+`IMAGE_MODEL=wan2.6-image` 与原北京 `IMAGE_API_BASE` 可继续使用。重启后 `npm run doctor` 应显示 `protocol: multimodal-async`，最终路径为 `/api/v1/services/aigc/image-generation/generation`。需拉取修复代码后才有此行为。
+
+验证：双入口的接口合同模拟（4种地址）、任务查询、最大1张图限制；`PREVIEW_IMAGE_MODEL=wan2.6-image` 可运行同一移动浏览器验收。所有验证连接本地模拟服务，不消耗厂商额度。
+
+官方接口参考：https://help.aliyun.com/zh/model-studio/wan-image-generation-api-reference

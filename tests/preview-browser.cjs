@@ -9,19 +9,33 @@ const projectRoot = path.resolve(__dirname,'..');
 (async()=>{
  const cwd = mkdtempSync(path.join(tmpdir(),'guide-preview-'));
  for(const name of ['.next','node_modules','data']) symlinkSync(path.join(projectRoot,name),path.join(cwd,name),'dir');
+ const imageModel = process.env.PREVIEW_IMAGE_MODEL || 'qwen-image-3.0';
+ const wan = imageModel === 'wan2.6-image';
  let imageCalls = 0;
  const provider = createServer(async (req,res)=>{
   let raw='';for await(const chunk of req) raw+=chunk;
   try {
-   assert.equal(req.url,'/compatible-mode/v1/images/generations');assert.equal(req.method,'POST');
    assert.equal(req.headers.authorization,'Bearer local-fixture-only');
-   const body=JSON.parse(raw);assert.equal(body.n,1);assert.equal(body.size,'1024x1024');assert.equal(body.enable_thinking,false);imageCalls++;
-   res.writeHead(200,{'Content-Type':'application/json'});
-   res.end(JSON.stringify({data:[{url:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='}]}));
+   const imageUrl='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+   if (wan && req.method==='GET') {
+    assert.equal(req.url,'/api/v1/tasks/wan-browser-fixture');
+    res.writeHead(200,{'Content-Type':'application/json'});
+    res.end(JSON.stringify({output:{task_status:'SUCCEEDED',choices:[{message:{content:[{image:imageUrl}]}}]}}));return;
+   }
+   assert.equal(req.method,'POST');const body=JSON.parse(raw);assert.equal(body.model,imageModel);
+   if (wan) {
+    assert.equal(req.url,'/api/v1/services/aigc/image-generation/generation');
+    assert.equal(req.headers['x-dashscope-async'],'enable');
+    assert.equal(body.parameters.enable_interleave,true);assert.equal(body.parameters.max_images,1);assert.equal(body.parameters.n,1);
+   } else {
+    assert.equal(req.url,'/compatible-mode/v1/images/generations');assert.equal(body.n,1);assert.equal(body.size,'1024x1024');assert.equal(body.enable_thinking,false);
+   }
+   imageCalls++;res.writeHead(200,{'Content-Type':'application/json'});
+   res.end(JSON.stringify(wan ? {output:{task_id:'wan-browser-fixture',task_status:'PENDING'}} : {data:[{url:imageUrl}]}));
   }catch(error){res.writeHead(400);res.end(JSON.stringify({message:error.message}));}
  });
  await new Promise(resolve=>provider.listen(0,'127.0.0.1',resolve));
- writeFileSync(path.join(cwd,'.env'), `GUIDE_IMAGE_ENABLED=true\nIMAGE_API_BASE=http://127.0.0.1:${provider.address().port}/compatible-mode/v1\nIMAGE_MODEL=qwen-image-3.0\nIMAGE_API_KEY=local-fixture-only\n`);
+ writeFileSync(path.join(cwd,'.env'), `GUIDE_IMAGE_ENABLED=true\nIMAGE_API_BASE=http://127.0.0.1:${provider.address().port}${wan ? '/api/v1/services/aigc/image-generation/generation' : '/compatible-mode/v1'}\nIMAGE_MODEL=${imageModel}\nIMAGE_API_KEY=local-fixture-only\n`);
  const testEnv={...process.env,GUIDE_SQLITE_FILE:path.join(cwd,'test.sqlite'),GUIDE_AGENT_LIVE_MODEL:'false',GUIDE_RAG_REMOTE_CONFIRMED:'false',FEISHU_SYNC_ENABLED:'false',NEXT_TELEMETRY_DISABLED:'1'};
  for(const key of ['GUIDE_IMAGE_ENABLED','IMAGE_API_BASE','IMAGE_MODEL','IMAGE_API_KEY','__NEXT_PROCESSED_ENV']) delete testEnv[key];
  const server = spawn(process.execPath,['node_modules/next/dist/bin/next','start','-H','127.0.0.1','-p','3100'], {cwd,env:testEnv});

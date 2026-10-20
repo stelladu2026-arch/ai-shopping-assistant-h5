@@ -56,6 +56,31 @@ for (const executeImage of [nextImage,legacyImage]) {
   assert.match(mismatch.label,/模型与接口可能不匹配/);
   assert.match(mismatch.label,/qwen-image-3\.0/);
   assert.equal(JSON.stringify(mismatch).includes('fixture-only'),false);
+  for (const address of [base.IMAGE_API_BASE, base.IMAGE_API_BASE+'/images/generations', 'https://dashscope.aliyuncs.com/api/v1', 'https://fixture.cn-beijing.maas.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation']) {
+    let posts = 0, polls = 0;
+    const wan = await executeImage({id:'S01',name:'测试商品',image:'/products/S01.png'}, {...base,IMAGE_MODEL:'wan2.6-image',IMAGE_API_BASE:address}, async (url,init)=>{
+      const host = new URL(address).origin;
+      if (init.method === 'POST') {
+        posts++;
+        assert.equal(String(url),host+'/api/v1/services/aigc/image-generation/generation');
+        assert.equal(init.headers['X-DashScope-Async'],'enable');
+        const body = JSON.parse(init.body);
+        assert.equal(body.model,'wan2.6-image');
+        assert.equal(body.prompt,undefined);
+        assert.deepEqual(body.input.messages[0].content,[{text:'家具示意。保持资料中的名称、颜色和材质，不要改成另一种商品。测试商品，，型号。'}]);
+        assert.equal(body.parameters.enable_interleave,true);
+        assert.equal(body.parameters.max_images,1,'never use provider default of five images');
+        assert.equal(body.parameters.n,1);
+        assert.equal(body.parameters.size,'1024*1024');
+        assert.equal(body.parameters.stream,undefined);
+        return {ok:true,status:200,text:async()=>JSON.stringify({output:{task_id:'wan-task',task_status:'PENDING'}})};
+      }
+      polls++;
+      assert.equal(String(url),host+'/api/v1/tasks/wan-task');
+      return {ok:true,status:200,text:async()=>JSON.stringify({output:{task_status:'SUCCEEDED',choices:[{message:{content:[{text:'已完成'},{image:'https://fixture.invalid/wan.png'}]}}]}})};
+    });
+    assert.equal(posts,1);assert.equal(polls,1);assert.equal(wan.url,'https://fixture.invalid/wan.png');
+  }
   const rejected=await executeImage({name:'测试商品'},base,async()=>({ok:false,status:403,headers:new Headers({'x-request-id':'fixture-request-001'}),text:async()=>JSON.stringify({code:'AccessDenied',message:'fixture-only permission denied'})}));
   assert.equal(rejected.requestId,'fixture-request-001');
   assert.equal(rejected.code,'AccessDenied');

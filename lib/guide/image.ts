@@ -22,6 +22,10 @@ function dashscopeImageModel(model) {
   return /qwen|dashscope/i.test(String(model || ''));
 }
 
+function wan26Image(model) {
+  return /^wan2\.6-image(?:-|$)/i.test(String(model || ''));
+}
+
 function modernQwen(model) {
   return /^qwen-image-(3\.0|2\.1)(?:-|$)/i.test(String(model || ''));
 }
@@ -34,6 +38,8 @@ function imageSize(model, kind) {
 }
 
 function fastOptions(model) {
+  // Text-only requests require interleaved mode; its default max_images is 5.
+  if (wan26Image(model)) return { enable_interleave: true, max_images: 1 };
   return modernQwen(model) ? { enable_thinking: false, watermark: false } : {};
 }
 
@@ -100,6 +106,11 @@ function imageEndpoint(base, model) {
   let parsed = null;
   try { parsed = new URL(trimmed); } catch { parsed = null; }
   const path = parsed ? parsed.pathname.replace(/\/+$/, '') : '';
+  // Wan 2.6 Image has no OpenAI Images endpoint. With text-only input,
+  // use its native async protocol to avoid the sync interleaved/SSE requirement.
+  if (parsed && dashscopeHost(parsed.hostname) && wan26Image(model)) {
+    return {url: parsed.origin + '/api/v1/services/aigc/image-generation/generation', native: true, kind: 'multimodal-async'};
+  }
   // Respect explicitly supplied native endpoints, including the 3.0 async protocol.
   if (parsed && /\/api\/v1\/services\/aigc\/image-generation\/generation$/i.test(path)) {
     return {url: parsed.origin + path, native: true, kind: 'multimodal-async'};
