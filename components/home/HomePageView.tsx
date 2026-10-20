@@ -34,6 +34,7 @@ export function HomePageView({ data }: HomePageViewProps) {
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overscroll-contain tech-scroll">
           <header className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-border bg-background/95 px-4 py-3 backdrop-blur-sm">
             <div className="min-w-0">
+              <Link href="/" className="mb-1 inline-block text-[11px] text-muted-foreground underline-offset-2 hover:underline">项目介绍</Link>
               <h1 className="truncate text-[17px] font-semibold leading-tight tracking-tight text-foreground">
                 {data.title}
               </h1>

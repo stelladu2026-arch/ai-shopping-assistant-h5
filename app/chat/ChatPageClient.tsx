@@ -50,6 +50,7 @@ export function ChatPageClient() {
   const [sessionId, setSessionId] = useState("");
   const [sceneMode, setSceneMode] = useState<AgentScene>("store_rag_query");
   const autoSentQuery = useRef(false);
+  const demoDraftLoaded = useRef(false);
   const catalogConfirmRef = useRef(false);
   const [messagesMoments, setMessagesMoments] = useState<ChatMessage[]>(chatInitialMessages);
   const [messagesRag, setMessagesRag] = useState<ChatMessage[]>(chatInitialMessages);
@@ -222,6 +223,9 @@ export function ChatPageClient() {
     }
     if (kindParam) {
       setMomentsForm((prev) => ({ ...prev, outputKind: kindParam }));
+    }
+    if (!rec && searchParams.get("imageCount") === "1") {
+      setMomentsForm((prev) => ({ ...prev, imageCount: 1 }));
     }
 
     setSessionHydrated(true);
@@ -761,6 +765,14 @@ export function ChatPageClient() {
       if (sessionId) void loadGuide(sessionId);
     }
   }, [sessionId, sending, loadGuide]);
+
+  useEffect(() => {
+    if (!sessionHydrated || demoDraftLoaded.current || searchParams.get("q")) return;
+    const draft = searchParams.get("draft");
+    if (!draft) return;
+    demoDraftLoaded.current = true;
+    setRagDraft(draft.slice(0, 500));
+  }, [sessionHydrated, searchParams]);
 
   useEffect(() => {
     if (!sessionHydrated || autoSentQuery.current) return;

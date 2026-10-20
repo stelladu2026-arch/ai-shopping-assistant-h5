@@ -33,7 +33,7 @@ const iconMap: Record<TabIcon, ReactElement> = {
 };
 
 const tabHref = (icon: TabIcon): string | undefined => {
-  if (icon === "home") return "/";
+  if (icon === "home") return "/guide";
   if (icon === "sessions") return "/sessions";
   return undefined;
 };

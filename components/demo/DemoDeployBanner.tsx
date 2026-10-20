@@ -1,6 +1,11 @@
-/** 线上演示部署时展示给访客的简要说明（由 NEXT_PUBLIC_DEMO_MODE=1 开启） */
+"use client";
+
+import { usePathname } from "next/navigation";
+
+/** 账号提示只在操作页展示，项目介绍页使用自己的访客引导。 */
 export function DemoDeployBanner() {
-  if (process.env.NEXT_PUBLIC_DEMO_MODE !== "1") return null;
+  const pathname = usePathname();
+  if (process.env.NEXT_PUBLIC_DEMO_MODE !== "1" || pathname === "/") return null;
 
   return (
     <div className="border-b border-amber-200/80 bg-amber-50/95 px-3 py-2 text-center text-[0.72rem] leading-relaxed text-amber-950">
