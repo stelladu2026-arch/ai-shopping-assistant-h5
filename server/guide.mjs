@@ -1,3 +1,4 @@
+import { EXTRA_CATEGORY_PHRASES, tableCategoryAlias, resolveDemandLanguage } from "./demand-language.mjs";
 import { storeDate } from "./date.mjs";
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
@@ -21,7 +22,7 @@ function policyReply() {
 }
 
 const LIGHT_COLORS = ['米白', '浅灰'];
-const CATEGORY_PHRASES = ['床头柜', '电视柜', '斗柜', '衣柜', '书柜', '鞋柜', '橱柜', '餐边柜', '柜子', '休闲椅', '床架', '椅子', '餐桌', '沙发', '床', '柜'];
+const CATEGORY_PHRASES = [...EXTRA_CATEGORY_PHRASES, '床头柜', '电视柜', '斗柜', '衣柜', '书柜', '鞋柜', '橱柜', '餐边柜', '柜子', '休闲椅', '床架', '椅子', '餐桌', '沙发', '床', '柜'];
 const FORBIDDEN = ['终身保修', '免费送装', '环保', '舒适', '终身质保'];
 
 export function createState() {
@@ -155,7 +156,7 @@ function readWidth(text) {
 function canonicalCategory(phrase) {
   if (phrase === '椅子') return '休闲椅';
   if (phrase === '床') return '床架';
-  return phrase;
+  return tableCategoryAlias(phrase);
 }
 
 function categoryPhrase(part) {
@@ -336,8 +337,8 @@ export function applyTurn(state, text, clientRevision) {
   const next = structuredClone(state);
   const before = structuredClone(next.constraints);
   const width = parseWidth(text);
-  const budget = parseBudget(text);
-  const category = parseCategory(text);
+  const read = resolveDemandLanguage(state, text, { budget: parseBudget(text), category: parseCategory(text) }, readAmount);
+  const { budget, category } = read;
   const color = parseColor(text);
   const material = parseMaterial(text);
   const copy = parseCopy(text);
@@ -347,9 +348,12 @@ export function applyTurn(state, text, clientRevision) {
 
   if (width?.clear) next.constraints.width_max_cm = null;
   else if (width?.value != null) next.constraints.width_max_cm = width.value;
-  if (budget != null) next.constraints.budget_max_cny = budget;
+  next.demand_clarification = read.clarification;
+  if (read.clarification.budget) next.constraints.budget_max_cny = null;
+  else if (budget != null) next.constraints.budget_max_cny = budget;
   else if (clearsBudget(text)) next.constraints.budget_max_cny = null;
-  if (category) next.constraints.category = category;
+  if (read.clarification.category) next.constraints.category = null;
+  else if (category) next.constraints.category = category;
   else if (clearsCategory(text)) next.constraints.category = null;
   if (color?.clear) next.constraints.color = null;
   else if (color?.value) next.constraints.color = color.value;
@@ -373,6 +377,16 @@ export function applyTurn(state, text, clientRevision) {
   let searched = false;
   let composed = false;
   next.pending_question = null;
+
+  if (read.clarificationQuestion) {
+    next.pending_question = read.clarificationQuestion;
+    next.candidate_ids = [];
+    next.confirmed_product_id = null;
+    next.confirmed_product_version = null;
+    next.card = null;
+    next.revision += 1;
+    return {ok: true, status: 'ask', reply: next.pending_question, state: next, searched, composed};
+  }
 
   if (material?.ambiguous) {
     next.pending_question = '当前只能排除一种材质，请指定要排除的那一种。';

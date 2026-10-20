@@ -280,6 +280,9 @@ export async function guideMaterial(input, sessionId, options = {}) {
       cardTitle: "素材没有生成",
       bodyTitle: "",
       bodyText: ran.error === "need_confirm" ? "先点选确认商品，再生成素材。" : "素材没有生成，可以再试一次。已确认商品还在。",
+      imagePlaceholder: input?.outputKind === "copy_only" ? "" : (ran.error === "need_confirm"
+        ? "尚未调用生图接口：请先确认商品，再提交生成配图或图文。"
+        : "尚未完成生图：素材流程未完成，请查看本次错误提示。"),
       hashtags: [],
       imageSuggestion: "",
       generatedImageUrl: "",
@@ -450,10 +453,11 @@ export async function guideAct(body) {
     }
     session.record.state = edited.state;
     session.record.offerSwitch = false;
-    const ran = await runGuideGraph(session, { intent: "turn", needsResearch: true, text: "" });
+    const ran = await runGuideGraph(session, { intent: "turn", needsResearch: edited.needsResearch, text: "" });
     let lead = "";
     if (ran.capped) lead = ran.reply;
     else if (!ran.ok) lead = "筛选没有完成，可以再试一次。";
+    else if (session.record.state.pending_question) lead = session.record.state.pending_question;
     else if (!session.record.state.candidate_ids.length) {
       const probed = probeLead(session.record.state.probe);
       session.record.state.pending_question = probed || FAILURE_TEXT.no_result;
@@ -487,6 +491,7 @@ export async function guideAct(body) {
       absorbed.state.confirmed_product_version = previous.confirmed_product_version;
       absorbed.state.card = previous.card;
       absorbed.state.constraints = previous.constraints;
+      absorbed.state.demand_clarification = previous.demand_clarification;
       absorbed.state.pending_question = previous.pending_question;
       absorbed.state.probe = previous.probe;
       absorbed.state.applied_preference = previous.applied_preference;

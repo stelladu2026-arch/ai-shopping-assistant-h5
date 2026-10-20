@@ -4,9 +4,10 @@ import promotions from "../../data/promotions.json";
 import { clausePatch } from "./clauses";
 import { buildPromoPlan } from "./promos";
 import { FAILURE_TEXT } from "./limits";
+import { EXTRA_CATEGORY_PHRASES, tableCategoryAlias, resolveDemandLanguage, demandQuestion } from "../../server/demand-language.mjs";
 
 const LIGHT_COLORS = ['米白', '浅灰'];
-const CATEGORY_PHRASES = ["床头柜", "电视柜", "斗柜", "衣柜", "书柜", "鞋柜", "橱柜", "餐边柜", "柜子", "休闲椅", "床架", "椅子", "餐桌", "沙发", "床", "柜"];
+const CATEGORY_PHRASES = [...EXTRA_CATEGORY_PHRASES, "床头柜", "电视柜", "斗柜", "衣柜", "书柜", "鞋柜", "橱柜", "餐边柜", "柜子", "休闲椅", "床架", "椅子", "餐桌", "沙发", "床", "柜"];
 const FORBIDDEN = ['终身保修', '免费送装', '环保', '舒适', '终身质保'];
 
 const STYLES = ["北欧", "日式", "现代", "轻奢", "简约", "自然", "复古", "中式"];
@@ -34,6 +35,7 @@ export function defaultRoles() {
 export function createState() {
   return {
     revision: 0,
+    demand_clarification: { budget: null, category: null },
     constraints: {
       budget_max_cny: null,
       width_max_cm: null,
@@ -255,6 +257,7 @@ function writeConstraint(next, roles, change, strict) {
     if (field === "budget_max_cny" || field === "width_max_cm") {
       const amount = field === "width_max_cm" ? readWidth(change.value) : readAmount(change.value);
       if (amount == null || !Number.isFinite(amount)) return "bad_constraint_value";
+      if (field === "budget_max_cny" && resolveDemandLanguage(null, `预算${change.value}`, { budget: amount, category: null }, readAmount).clarification.budget) return "bad_constraint_value";
       next.constraints[field] = amount;
     } else next.constraints[field] = String(change.value).trim();
   } else if (strict) return "bad_constraint_value";
@@ -277,13 +280,17 @@ export function editConstraint(state, patch, clientRevision) {
   for (const change of changes) {
     const error = writeConstraint(next, roles, change, batched);
     if (error) return { ok: false, error, state, needsResearch: false };
+    if (next.demand_clarification && (change.clear || change.value != null)) {
+      if (change.field === 'budget_max_cny') next.demand_clarification.budget = null;
+      if (change.field === 'category') next.demand_clarification.category = null;
+    }
   }
   next.constraint_roles = roles;
   next.probe = null;
-  next.pending_question = null;
+  next.pending_question = demandQuestion(next.demand_clarification) || null;
   clearConfirmed(next);
   next.revision += 1;
-  return { ok: true, state: next, needsResearch: true };
+  return { ok: true, state: next, needsResearch: !next.pending_question };
 }
 
 export function acceptProbe(state, clientRevision, field) {
@@ -399,7 +406,7 @@ function readWidth(text) {
 function canonicalCategory(phrase) {
   if (phrase === "椅子") return "休闲椅";
   if (phrase === "床") return "床架";
-  return phrase;
+  return tableCategoryAlias(phrase);
 }
 
 function categoryPhrase(part) {
@@ -556,12 +563,11 @@ function mergeMaterial(offlineMaterial, patch) {
   return material;
 }
 
-function readTurn(text, interpretation) {
+function readTurn(text, interpretation, state) {
   const patch = clausePatch(text, interpretation);
   return {
     width: parseWidth(text),
-    budget: parseBudget(text),
-    category: parseCategory(text),
+    ...resolveDemandLanguage(state, text, { budget: parseBudget(text), category: parseCategory(text) }, readAmount),
     color: patch?.color || parseColor(text),
     material: mergeMaterial(parseMaterial(text), patch),
     style: patch?.style || parseStyle(text),
@@ -577,7 +583,7 @@ function unmatchedLookup(text) {
     if (text.includes(item.name) || text.includes(item.model)) return null;
   }
   const rest = text
-    .replace(/预算|上限|最多|不超过|不少于|宽度|尺寸|颜色|材质|品类|只看|改看|改为|改成|换一款|重新选|便宜点|小户型|去掉|取消|不要|排除|浅色|米白|浅灰|深绿|原木|皮质|布艺|橡木|松木|北欧|日式|现代|轻奢|简约|自然|复古|中式|沙发|餐桌|休闲椅|床架|床头柜|柜子|椅子|柜|其他|保持|不变|也可以|不限|文案|话术|发布|下单|朋友圈|确认|商品|名称|型号|不是|还是|提高|以内|直接|你自己|选好|帮我|写它|请|想买|适合|最好|优先|尽量|喜欢|偏好|可以的话|必须|一定要|只能|只要|是|色|的|元|厘米|cm|米/gi, "")
+    .replace(/书桌|办公桌|电脑桌|茶几|饭桌|餐台|桌子|最高|块钱|块|预算|上限|最多|不超过|不少于|宽度|尺寸|颜色|材质|品类|只看|改看|改为|改成|换一款|重新选|便宜点|小户型|去掉|取消|不要|排除|浅色|米白|浅灰|深绿|原木|皮质|布艺|橡木|松木|北欧|日式|现代|轻奢|简约|自然|复古|中式|沙发|餐桌|休闲椅|床架|床头柜|柜子|椅子|柜|其他|保持|不变|也可以|不限|文案|话术|发布|下单|朋友圈|确认|商品|名称|型号|不是|还是|提高|以内|直接|你自己|选好|帮我|写它|请|想买|适合|最好|优先|尽量|喜欢|偏好|可以的话|必须|一定要|只能|只要|是|色|的|元|厘米|cm|米/gi, "")
     .replace(/[零一二三四五六七八九十百千万两]/g, "")
     .replace(/[\d\s，,。；;、．.！!？?（）()]/g, "");
   return rest.length >= 2 ? rest.slice(0, 16) : null;
@@ -589,7 +595,7 @@ export function absorbDemand(state, text, clientRevision, interpretation = null)
   }
   const next = structuredClone(state);
   const before = structuredClone(next.constraints);
-  const read = readTurn(text, interpretation);
+  const read = readTurn(text, interpretation, state);
   const { width, budget, category, color, material, style, copy, marks } = read;
   const cheaper = /便宜点/.test(text) && budget == null;
   const smallHome = /小户型/.test(text) && !(width && width.value);
@@ -597,9 +603,12 @@ export function absorbDemand(state, text, clientRevision, interpretation = null)
 
   if (width?.clear) next.constraints.width_max_cm = null;
   else if (width?.value != null) next.constraints.width_max_cm = width.value;
-  if (budget != null) next.constraints.budget_max_cny = budget;
+  next.demand_clarification = read.clarification;
+  if (read.clarification.budget) next.constraints.budget_max_cny = null;
+  else if (budget != null) next.constraints.budget_max_cny = budget;
   else if (clearsBudget(text)) next.constraints.budget_max_cny = null;
-  if (category) next.constraints.category = category;
+  if (read.clarification.category) next.constraints.category = null;
+  else if (category) next.constraints.category = category;
   else if (clearsCategory(text)) next.constraints.category = null;
   if (color?.clear) next.constraints.color = null;
   else if (color?.value) next.constraints.color = color.value;
@@ -625,8 +634,16 @@ export function absorbDemand(state, text, clientRevision, interpretation = null)
     next.confirmed_product_version = null;
     next.card = null;
   }
-  const changed = constraintsChanged(before, next.constraints) || switchProduct;
+  const changed = constraintsChanged(before, next.constraints) || switchProduct
+    || JSON.stringify(state.demand_clarification || { budget: null, category: null }) !== JSON.stringify(next.demand_clarification || {});
   next.pending_question = null;
+  if (read.clarificationQuestion) {
+    next.pending_question = read.clarificationQuestion;
+    next.candidate_ids = [];
+    clearConfirmed(next);
+    next.revision += 1;
+    return {ok: true, state: next, needsResearch: false, changed, reply: next.pending_question};
+  }
   if (badParams(text, {budget, width, cheaper, smallHome})) {
     next.pending_question = FAILURE_TEXT.bad_params;
     next.candidate_ids = [];
@@ -653,7 +670,7 @@ export function absorbDemand(state, text, clientRevision, interpretation = null)
     next.pending_question = '还缺宽度上限。下一步：直接回复厘米数。「小户型」不能直接换成尺寸，我不会自行填写。';
   }
   if (unknownName || cheaper || smallHome) next.candidate_ids = [];
-  if (changed && !next.pending_question) {
+  if (changed) {
     next.confirmed_product_id = null;
     next.confirmed_product_version = null;
     next.card = null;
@@ -674,7 +691,7 @@ export function applyTurn(state, text, clientRevision, interpretation = null) {
   }
   const next = structuredClone(state);
   const before = structuredClone(next.constraints);
-  const read = readTurn(text, interpretation);
+  const read = readTurn(text, interpretation, state);
   const { width, budget, category, color, material, style, copy, marks } = read;
   const cheaper = /便宜点/.test(text) && budget == null;
   const smallHome = /小户型/.test(text) && !(width && width.value);
@@ -682,9 +699,12 @@ export function applyTurn(state, text, clientRevision, interpretation = null) {
 
   if (width?.clear) next.constraints.width_max_cm = null;
   else if (width?.value != null) next.constraints.width_max_cm = width.value;
-  if (budget != null) next.constraints.budget_max_cny = budget;
+  next.demand_clarification = read.clarification;
+  if (read.clarification.budget) next.constraints.budget_max_cny = null;
+  else if (budget != null) next.constraints.budget_max_cny = budget;
   else if (clearsBudget(text)) next.constraints.budget_max_cny = null;
-  if (category) next.constraints.category = category;
+  if (read.clarification.category) next.constraints.category = null;
+  else if (category) next.constraints.category = category;
   else if (clearsCategory(text)) next.constraints.category = null;
   if (color?.clear) next.constraints.color = null;
   else if (color?.value) next.constraints.color = color.value;
@@ -713,10 +733,19 @@ export function applyTurn(state, text, clientRevision, interpretation = null) {
     next.card = null;
   }
 
-  const changed = constraintsChanged(before, next.constraints) || switchProduct;
+  const changed = constraintsChanged(before, next.constraints) || switchProduct
+    || JSON.stringify(state.demand_clarification || { budget: null, category: null }) !== JSON.stringify(next.demand_clarification || {});
   let searched = false;
   let composed = false;
   next.pending_question = null;
+
+  if (read.clarificationQuestion) {
+    next.pending_question = read.clarificationQuestion;
+    next.candidate_ids = [];
+    clearConfirmed(next);
+    next.revision += 1;
+    return {ok: true, status: 'ask', reply: next.pending_question, state: next, searched, composed};
+  }
 
   if (material?.ambiguous) {
     next.pending_question = '当前只能排除一种材质，请指定要排除的那一种。';
@@ -803,6 +832,7 @@ export function confirmProduct(state, productId, clientRevision) {
   const product = productById(productId);
   next.confirmed_product_id = product.id;
   next.confirmed_product_version = product.version;
+  next.demand_clarification = { budget: null, category: null };
   next.pending_question = null;
   next.card = buildCard(product, next.copy_requirement, []);
   next.revision += 1;
