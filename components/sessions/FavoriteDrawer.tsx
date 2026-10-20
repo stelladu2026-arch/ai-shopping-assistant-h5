@@ -9,12 +9,14 @@ import type { FavoriteContentType, FavoriteRecord } from "@/types/session";
 
 function typeLabel(t: FavoriteContentType): string {
   switch (t) {
+    case "product":
+      return "商品";
+    case "material":
     case "moments_card":
-      return "朋友圈文案";
+      return "素材";
     case "rag_card":
-      return "政策摘要";
     case "text_reply":
-      return "话术回复";
+      return "其他记录";
     default:
       return "内容";
   }

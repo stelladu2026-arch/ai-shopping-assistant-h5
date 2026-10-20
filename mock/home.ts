@@ -3,7 +3,7 @@ import type { HomePageData } from "@/types/home";
 export const homePageMock: HomePageData = {
   title: "AI导购助手",
   profile: {
-    displayName: "王小雅",
+    displayName: "演示导购",
     employeeId: "GD-1026",
   },
   sectionTitles: {
@@ -14,13 +14,13 @@ export const homePageMock: HomePageData = {
   quickActions: [
     {
       id: "policy-query",
-      title: "政策查询",
-      description: "查询活动政策、商品价格及参数",
+      title: "选品推荐",
+      description: "按预算、尺寸、颜色和材质筛选商品",
       icon: "product",
     },
     {
       id: "marketing-generate",
-      title: "朋友圈生成",
+      title: "素材生成",
       description: "",
       icon: "marketing",
       featured: true,
@@ -31,7 +31,7 @@ export const homePageMock: HomePageData = {
         },
         {
           id: "generate-image",
-          label: "图片",
+          label: "配图",
         },
         {
           id: "generate-rich-content",
@@ -43,19 +43,19 @@ export const homePageMock: HomePageData = {
   commonQuestions: [
     {
       id: "question-1",
-      label: "这款床垫适合哪些人群？",
+      label: "浅色沙发，预算3000元，宽度不超过180厘米，不要皮质",
     },
     {
       id: "question-2",
-      label: "本周门店满减活动怎么叠加？",
+      label: "预算3000元，想买适合小户型的沙发",
     },
     {
       id: "question-3",
-      label: "帮我写一条朋友圈促销文案",
+      label: "只看沙发，预算最多2299元",
     },
     {
       id: "question-4",
-      label: "给导购话术补一段卖点总结",
+      label: "便宜点",
     },
   ],
   bottomTabs: [

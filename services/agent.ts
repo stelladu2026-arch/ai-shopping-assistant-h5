@@ -1,16 +1,16 @@
+import { fetchJsonResponse } from "../lib/request-deadline";
 import type { AgentChatRequestBody, AgentChatResponseBody } from "@/types/agent";
 
 export async function postAgentChat(
   body: AgentChatRequestBody,
 ): Promise<AgentChatResponseBody> {
-  const res = await fetch("/api/agent/chat", {
+  const { response: res, payload } = await fetchJsonResponse<AgentChatResponseBody>("/api/agent/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
-  });
+  }, body.scene === "moments_marketing" ? 150000 : 60000);
   if (!res.ok) {
-    const err = await res.text().catch(() => res.statusText);
-    throw new Error(err || `Agent chat failed: ${res.status}`);
+    throw new Error(`Agent chat failed: ${res.status}`);
   }
-  return res.json() as Promise<AgentChatResponseBody>;
+  return payload;
 }

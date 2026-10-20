@@ -1,5 +1,7 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
+
 interface MomentsComposerBarProps {
   value: string;
   onChange: (v: string) => void;
@@ -17,12 +19,12 @@ export function MomentsComposerBar({
   sending = false,
 }: MomentsComposerBarProps) {
   return (
-    <div className="bg-white pt-2">
-      <div className="px-3">
-        <label className="sr-only" htmlFor="moments-composer-input">
-          补充说明或修改要求
+    <div className="bg-card px-4 pb-3 pt-2">
+      <div>
+        <label className="mb-1.5 block text-xs font-medium text-muted-foreground" htmlFor="moments-composer-input">
+          补充说明
         </label>
-        <div className="flex h-11 items-center gap-1 rounded-xl border border-slate-200/80 bg-slate-50/80 pl-3 pr-1.5 transition-shadow duration-75 focus-within:border-brand-400 focus-within:ring-2 focus-within:ring-brand-500/20">
+        <div className="flex h-11 items-center gap-1 rounded-xl border border-input bg-background pl-3 pr-1 transition-shadow duration-150 focus-within:ring-2 focus-within:ring-ring">
           <input
             id="moments-composer-input"
             type="text"
@@ -35,14 +37,15 @@ export function MomentsComposerBar({
                 if (!disabled && !sending && value.trim()) onSend();
               }
             }}
-            placeholder="如：语气更活泼、文案缩短一半…"
+            placeholder="如：质保多久、便宜点、宽度不超过160厘米"
             className="min-h-0 min-w-0 flex-1 border-0 bg-transparent py-0 text-[0.88rem] font-medium text-slate-900 outline-none placeholder:text-slate-400 disabled:opacity-60"
           />
-          <button
+          <Button
             type="button"
+            size="sm"
             disabled={disabled || sending || !value.trim()}
             onClick={onSend}
-            className="flex h-8 min-w-[3.75rem] shrink-0 items-center justify-center gap-1 rounded-lg bg-brand-600 px-2 text-[0.78rem] font-bold text-white shadow-sm transition-colors duration-75 active:bg-brand-700 disabled:opacity-40"
+            className="h-8 min-w-[4.25rem] shrink-0"
           >
             {sending ? (
               <>
@@ -55,7 +58,7 @@ export function MomentsComposerBar({
             ) : (
               "发送"
             )}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

@@ -1,0 +1,987 @@
+{
+  "id": "local-guide-check-20261006",
+  "generated_from": "导购Agent_产品与架构设计.md 与 Guide-Agent-Acceptance-Model-Selection-v1 里的场景、约束、活动、素材、记忆、反思。本机没有原版 eval_cases.json，也没有公开商品样本。",
+  "not_original_suite": true,
+  "not_real_model": true,
+  "must_not_label": "验收通过",
+  "cases": [
+    {
+      "id": "L01",
+      "name": "浅色沙发硬条件筛选",
+      "rules": ["筛选结果", "路由不进内容", "资料不编造", "路由不调用模型"],
+      "source": "验收包 A01 第1步",
+      "steps": [
+        {"op": "reset"},
+        {
+          "op": "turn",
+          "text": "浅色沙发，预算3000元，宽度不超过180厘米，不要皮质",
+          "expect": {
+            "ok": true,
+            "edge": "product_decision",
+            "entered": ["route", "product_decision"],
+            "runtime": "langgraph",
+            "modelCalled": false,
+            "mode": "simulation",
+            "candidateIds": ["S01", "S02"],
+            "confirmedId": null,
+            "constraints": {"budget_max_cny": 3000, "width_max_cm": 180, "category": "沙发", "color": "浅色", "exclude_material": "皮质"},
+            "reasonsFromStore": true,
+            "leadIncludes": ["请点选要确认的商品"],
+            "workflowStep": "商品决策",
+            "workflowStatus": "完成",
+            "ragIncludes": ["门店资料"],
+            "agentIncludes": ["自己筛选", "不能手改"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "L02",
+      "name": "改预算并保留颜色",
+      "rules": ["筛选结果", "未提到的条件保留"],
+      "source": "验收包 A01 第2步",
+      "steps": [
+        {"op": "reset"},
+        {"op": "turn", "text": "浅色沙发，预算3000元，宽度不超过180厘米，不要皮质"},
+        {
+          "op": "turn",
+          "text": "预算改成2400，颜色不变",
+          "expect": {
+            "candidateIds": ["S02"],
+            "constraints": {"budget_max_cny": 2400, "width_max_cm": 180, "category": "沙发", "color": "浅色", "exclude_material": "皮质"}
+          }
+        }
+      ]
+    },
+    {
+      "id": "L03",
+      "name": "撤销宽度上限",
+      "rules": ["明确撤销才清空"],
+      "source": "验收包 A01 第3步",
+      "steps": [
+        {"op": "reset"},
+        {"op": "turn", "text": "浅色沙发，预算2400元，宽度不超过180厘米，不要皮质"},
+        {
+          "op": "turn",
+          "text": "尺寸不限，其他保持",
+          "expect": {
+            "candidateIds": ["S02"],
+            "constraints": {"budget_max_cny": 2400, "width_max_cm": null, "color": "浅色", "exclude_material": "皮质"}
+          }
+        }
+      ]
+    },
+    {
+      "id": "L04",
+      "name": "便宜点先追问",
+      "rules": ["不编造预算", "路由停在追问"],
+      "source": "验收包 A02；01_acceptance 优先规则 1",
+      "steps": [
+        {"op": "reset"},
+        {"op": "turn", "text": "浅色沙发，预算3000元，宽度不超过180厘米，不要皮质"},
+        {
+          "op": "turn",
+          "text": "便宜点",
+          "expect": {
+            "edge": "ask",
+            "entered": ["route"],
+            "constraints": {"budget_max_cny": 3000, "color": "浅色"},
+            "productDecisionUnchanged": true,
+            "leadIncludes": ["不会自行降低"],
+            "workflowStep": "补条件",
+            "workflowStatus": "完成",
+            "ragIncludes": ["没有检索到"],
+            "agentIncludes": ["自己决定先追问", "不能把未验证的记忆"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "L05",
+      "name": "无匹配不放宽",
+      "rules": ["筛选结果为空时追问"],
+      "source": "验收包 A03；01_acceptance 优先规则 2",
+      "steps": [
+        {"op": "reset"},
+        {
+          "op": "turn",
+          "text": "预算最多500元，只看沙发",
+          "expect": {
+            "candidateIds": [],
+            "constraints": {"budget_max_cny": 500, "category": "沙发"},
+            "leadIncludes": ["不会自行放宽"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "L06",
+      "name": "两米换算并保留预算",
+      "rules": ["筛选结果", "条件保留"],
+      "source": "验收包 A04",
+      "steps": [
+        {"op": "reset"},
+        {"op": "turn", "text": "浅色沙发，预算3000元，宽度不超过180厘米，不要皮质"},
+        {
+          "op": "turn",
+          "text": "宽度改为两米",
+          "expect": {
+            "candidateIds": ["S01", "S02"],
+            "constraints": {"width_max_cm": 200, "budget_max_cny": 3000, "color": "浅色", "exclude_material": "皮质"}
+          }
+        }
+      ]
+    },
+    {
+      "id": "L07",
+      "name": "换一款后取消确认",
+      "rules": ["确认只能来自点选", "重新筛选"],
+      "source": "验收包 A05",
+      "steps": [
+        {"op": "reset"},
+        {"op": "turn", "text": "浅色沙发，预算3000元，宽度不超过180厘米，不要皮质"},
+        {"op": "confirm", "productId": "S01"},
+        {
+          "op": "turn",
+          "text": "换一款",
+          "expect": {
+            "confirmedId": null,
+            "candidateIds": ["S01", "S02"],
+            "edge": "product_decision",
+            "enteredExcludes": ["content"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "L08",
+      "name": "新接待不继承上一接待条件",
+      "rules": ["筛选结果", "记忆不参与筛选"],
+      "source": "验收包 A06",
+      "steps": [
+        {"op": "reset", "session": "acc_L08_old"},
+        {"op": "turn", "session": "acc_L08_old", "text": "浅色沙发，预算3000元，宽度不超过180厘米，不要皮质"},
+        {"op": "reset", "session": "acc_L08_new"},
+        {
+          "op": "turn",
+          "session": "acc_L08_new",
+          "text": "预算上限2400元",
+          "expect": {
+            "confirmedId": null,
+            "candidateIds": ["S02", "T01", "C01", "B01"],
+            "constraints": {"budget_max_cny": 2400, "width_max_cm": null, "color": null, "category": null, "exclude_material": null}
+          }
+        }
+      ]
+    },
+    {
+      "id": "L09",
+      "name": "已确认后只改说法不重新筛选",
+      "rules": ["路由确定性", "内容重跑才生成素材"],
+      "source": "验收包 A01 第5步；当前主路径不在聊天里重写商品",
+      "steps": [
+        {"op": "reset"},
+        {"op": "turn", "text": "浅色沙发，预算3000元，宽度不超过180厘米，不要皮质"},
+        {"op": "confirm", "productId": "S01"},
+        {
+          "op": "turn",
+          "text": "简洁一些",
+          "expect": {
+            "edge": "stay",
+            "entered": ["route"],
+            "confirmedId": "S01",
+            "productDecisionUnchanged": true,
+            "enteredExcludes": ["content"],
+            "leadIncludes": ["不会重新筛选"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "L10",
+      "name": "口头要求写文案也不能替用户确认",
+      "rules": ["不允许聊天确认", "路由进不了内容"],
+      "source": "验收包 A24",
+      "steps": [
+        {"op": "reset"},
+        {
+          "op": "turn",
+          "text": "浅色沙发，预算3000元，宽度不超过180厘米，不要皮质。你自己选好直接写文案",
+          "expect": {
+            "confirmedId": null,
+            "candidateIds": ["S01", "S02"],
+            "enteredExcludes": ["content"],
+            "materialNull": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "L11",
+      "name": "预算等于标价时包含",
+      "rules": ["筛选边界"],
+      "source": "验收包 A10",
+      "steps": [
+        {"op": "reset"},
+        {"op": "turn", "text": "只看沙发，预算最多2299元", "expect": {"candidateIds": ["S02"], "constraints": {"category": "沙发", "budget_max_cny": 2299}}}
+      ]
+    },
+    {
+      "id": "L12",
+      "name": "预算少1元不放宽",
+      "rules": ["筛选边界"],
+      "source": "验收包 A11",
+      "steps": [
+        {"op": "reset"},
+        {"op": "turn", "text": "只看沙发，预算最多2298元", "expect": {"candidateIds": [], "constraints": {"category": "沙发", "budget_max_cny": 2298}, "leadIncludes": ["不会自行放宽"]}}
+      ]
+    },
+    {
+      "id": "L13",
+      "name": "宽度等于160厘米时包含",
+      "rules": ["筛选边界"],
+      "source": "验收包 A12",
+      "steps": [
+        {"op": "reset"},
+        {"op": "turn", "text": "只看沙发，预算3000元，宽度最多160厘米", "expect": {"candidateIds": ["S02"], "constraints": {"width_max_cm": 160, "budget_max_cny": 3000}}}
+      ]
+    },
+    {
+      "id": "L14",
+      "name": "宽度少1厘米不放宽",
+      "rules": ["筛选边界"],
+      "source": "验收包 A13",
+      "steps": [
+        {"op": "reset"},
+        {"op": "turn", "text": "只看沙发，预算3000元，宽度最多159厘米", "expect": {"candidateIds": [], "leadIncludes": ["不会自行放宽"]}}
+      ]
+    },
+    {
+      "id": "L15",
+      "name": "不要皮质",
+      "rules": ["筛选结果"],
+      "source": "验收包 A14",
+      "steps": [
+        {"op": "reset"},
+        {"op": "turn", "text": "只看沙发，预算5000元，不要皮质", "expect": {"candidateIds": ["S01", "S02", "S04"], "constraints": {"exclude_material": "皮质", "budget_max_cny": 5000}}}
+      ]
+    },
+    {
+      "id": "L16",
+      "name": "撤销颜色后恢复深绿候选",
+      "rules": ["筛选结果"],
+      "source": "验收包 A15",
+      "steps": [
+        {"op": "reset"},
+        {"op": "turn", "text": "浅色沙发，预算5000元，不要皮质"},
+        {"op": "turn", "text": "颜色不限，其他不变", "expect": {"candidateIds": ["S01", "S02", "S04"], "constraints": {"color": null, "exclude_material": "皮质", "budget_max_cny": 5000}}}
+      ]
+    },
+    {
+      "id": "L17",
+      "name": "允许皮质后取消排除",
+      "rules": ["筛选结果"],
+      "source": "验收包 A16",
+      "steps": [
+        {"op": "reset"},
+        {"op": "turn", "text": "只看沙发，预算5000元，不要皮质"},
+        {"op": "turn", "text": "皮质也可以，其他不变", "expect": {"candidateIds": ["S01", "S02", "S03", "S04"], "constraints": {"exclude_material": null, "budget_max_cny": 5000}}}
+      ]
+    },
+    {
+      "id": "L18",
+      "name": "改看餐桌并保留预算",
+      "rules": ["筛选结果"],
+      "source": "验收包 A17",
+      "steps": [
+        {"op": "reset"},
+        {"op": "turn", "text": "只看沙发，预算3000元"},
+        {"op": "turn", "text": "改看餐桌，预算不变", "expect": {"candidateIds": ["T01", "T02"], "constraints": {"category": "餐桌", "budget_max_cny": 3000}}}
+      ]
+    },
+    {
+      "id": "L19",
+      "name": "只有明确提高预算才放宽",
+      "rules": ["筛选结果"],
+      "source": "验收包 A18",
+      "steps": [
+        {"op": "reset"},
+        {"op": "turn", "text": "只看沙发，预算2000元", "expect": {"candidateIds": [], "leadIncludes": ["不会自行放宽"]}},
+        {"op": "turn", "text": "预算提高到3000元，还是沙发", "expect": {"candidateIds": ["S01", "S02"], "constraints": {"budget_max_cny": 3000, "category": "沙发"}}}
+      ]
+    },
+    {
+      "id": "L20",
+      "name": "中文数字与一米八",
+      "rules": ["筛选结果"],
+      "source": "验收包 A19",
+      "steps": [
+        {"op": "reset"},
+        {"op": "turn", "text": "浅色沙发，预算三千元，宽度不超过一米八，不要皮质", "expect": {"candidateIds": ["S01", "S02"], "constraints": {"budget_max_cny": 3000, "width_max_cm": 180, "color": "浅色", "exclude_material": "皮质"}}}
+      ]
+    },
+    {
+      "id": "L21",
+      "name": "否定宽度不覆盖最终上限",
+      "rules": ["筛选结果"],
+      "source": "验收包 A20",
+      "steps": [
+        {"op": "reset"},
+        {"op": "turn", "text": "只看沙发，预算3000元，宽度最多180厘米"},
+        {"op": "turn", "text": "不是160厘米，宽度上限还是180厘米，其他不变", "expect": {"candidateIds": ["S01", "S02"], "constraints": {"width_max_cm": 180, "budget_max_cny": 3000}}}
+      ]
+    },
+    {
+      "id": "L22",
+      "name": "小户型不编造宽度",
+      "rules": ["不编造尺寸"],
+      "source": "验收包 A23",
+      "steps": [
+        {"op": "reset"},
+        {"op": "turn", "text": "预算3000元，想买适合小户型的沙发", "expect": {"edge": "ask", "entered": ["route"], "constraints": {"width_max_cm": null, "budget_max_cny": 3000}, "confirmedId": null, "leadIncludes": ["不会自行填写"]}}
+      ]
+    },
+    {
+      "id": "L23",
+      "name": "两种排除材质先追问",
+      "rules": ["不假装同时满足"],
+      "source": "验收包 M37",
+      "steps": [
+        {"op": "reset"},
+        {"op": "turn", "text": "不要皮质，也不要布艺", "expect": {"edge": "ask", "candidateIds": [], "leadIncludes": ["还缺要排除的那一种材质", "下一步"], "constraints": {"exclude_material": null}}}
+      ]
+    },
+    {
+      "id": "L24",
+      "name": "没有资料的商品不编造价格",
+      "rules": ["无资料不编造"],
+      "source": "门店资料检索边界",
+      "steps": [
+        {"op": "lookup", "query": "星河沙发", "expect": {"found": false, "textIncludes": ["不能编造"], "textExcludes": ["2699", "2299", "元"]}}
+      ]
+    },
+    {
+      "id": "L25",
+      "name": "已确认商品的活动组合不含互斥项",
+      "rules": ["活动能否叠加", "A和C不能叠加", "过期活动不可用", "反思不读上一轮"],
+      "source": "验收包 M25 M26 M27 M28",
+      "steps": [
+        {"op": "reset"},
+        {"op": "turn", "text": "浅色沙发，预算3000元，宽度不超过180厘米，不要皮质"},
+        {
+          "op": "confirm",
+          "productId": "S01",
+          "expect": {
+            "ok": true,
+            "confirmedId": "S01",
+            "entered": ["route", "product_decision"],
+            "enteredExcludes": ["content"],
+            "promoUse": ["A", "B"],
+            "promoExcluded": ["C", "EXPIRED"],
+            "noteIncludes": ["A 减 100 元", "B 减 50 元", "不能叠加", "不在有效期内"],
+            "noteExcludes": ["2519", "2469", "可以一起使用"],
+            "reflectionBlind": true,
+            "stackOk": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "L26",
+      "name": "另一件商品不能套用别人的活动",
+      "rules": ["活动能否叠加"],
+      "source": "验收包 M28，S02 不能使用 B 或 EXPIRED",
+      "steps": [
+        {"op": "reset"},
+        {"op": "turn", "text": "浅色沙发，预算3000元，宽度不超过180厘米，不要皮质"},
+        {
+          "op": "confirm",
+          "productId": "S02",
+          "expect": {
+            "confirmedId": "S02",
+            "promoUse": ["A"],
+            "noteExcludes": ["B 减", "EXPIRED", "C 减"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "L27",
+      "name": "未确认时内容不能另选商品",
+      "rules": ["内容不能在未确认时选出另一件", "缺确认商品时进不了内容"],
+      "source": "当前架构边界",
+      "steps": [
+        {"op": "reset"},
+        {
+          "op": "rerun-content",
+          "momentsInput": {"outputKind": "rich", "productName": "原木小餐桌", "sellingPoints": ["现货速发"], "copyStyle": "warm", "audience": "first_home"},
+          "expect": {
+            "ok": false,
+            "edge": "blocked",
+            "entered": ["route"],
+            "enteredExcludes": ["content", "product_decision"],
+            "confirmedId": null,
+            "contentMissing": true,
+            "materialNull": true,
+            "leadIncludes": ["先点选确认商品"],
+            "workflowStep": "内容生成",
+            "workflowStatus": "失败",
+            "agentIncludes": ["自己停住", "不另选"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "L28",
+      "name": "重新生成素材不改变已确认商品",
+      "rules": ["内容重跑不改已确认商品", "不另选一件", "不发明配图地址"],
+      "source": "当前架构边界",
+      "steps": [
+        {"op": "reset"},
+        {"op": "turn", "text": "浅色沙发，预算3000元，宽度不超过180厘米，不要皮质"},
+        {"op": "confirm", "productId": "S01"},
+        {
+          "op": "rerun-content",
+          "momentsInput": {"outputKind": "rich", "productName": "原木小餐桌", "sellingPoints": ["现货速发"], "copyStyle": "warm", "audience": "first_home"},
+          "expect": {
+            "ok": true,
+            "edge": "content",
+            "entered": ["route", "content"],
+            "confirmedId": "S01",
+            "confirmedUnchanged": true,
+            "candidatesUnchanged": true,
+            "productDecisionUnchanged": true,
+            "bodyTitle": "云朵双人沙发",
+            "bodyIncludes": ["云朵双人沙发", "演示回放、待核对", "现货速发"],
+            "bodyExcludes": ["原木小餐桌"],
+            "generatedImageUrl": "",
+            "ignoredName": "原木小餐桌"
+          }
+        },
+        {
+          "op": "sqlite",
+          "expect": {"routeRuntime": "langgraph", "productStatus": "completed", "contentStatus": "completed", "sqliteConfirmedId": "S01"}
+        }
+      ]
+    },
+    {
+      "id": "L29",
+      "name": "无依据承诺不写成事实",
+      "rules": ["是否允许编造"],
+      "source": "验收包 A09 M35；01_acceptance 优先规则 4",
+      "steps": [
+        {"op": "reset"},
+        {"op": "turn", "text": "浅色沙发，预算3000元，宽度不超过180厘米，不要皮质"},
+        {"op": "confirm", "productId": "S01"},
+        {
+          "op": "turn",
+          "text": "帮我写它终身保修",
+          "expect": {
+            "edge": "stay",
+            "enteredExcludes": ["content"],
+            "confirmedId": "S01",
+            "leadExcludes": ["终身保修"]
+          }
+        },
+        {
+          "op": "rerun-content",
+          "momentsInput": {"outputKind": "copy_only", "productName": "云朵双人沙发", "sellingPoints": ["终身保修", "免费送装", "环保材质"], "copyStyle": "warm", "audience": "first_home"},
+          "expect": {
+            "confirmedId": "S01",
+            "bodyIncludes": ["待核对，未写入正文", "资料里没有这些承诺"],
+            "bodyExcludes": ["提供终身保修", "免费送装服务", "环保认证"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "L30",
+      "name": "内容失败不抹掉已确认商品和上一份素材",
+      "rules": ["失败步骤可单独重跑"],
+      "source": "当前架构边界",
+      "steps": [
+        {"op": "reset"},
+        {"op": "turn", "text": "浅色沙发，预算3000元，宽度不超过180厘米，不要皮质"},
+        {"op": "confirm", "productId": "S01"},
+        {"op": "rerun-content", "momentsInput": {"outputKind": "rich", "productName": "云朵双人沙发", "sellingPoints": ["现货速发"], "copyStyle": "warm", "audience": "first_home"}},
+        {
+          "op": "rerun-content",
+          "forceFail": true,
+          "expect": {
+            "ok": false,
+            "confirmedUnchanged": true,
+            "confirmedId": "S01",
+            "candidatesUnchanged": true,
+            "materialKept": true,
+            "contentStatus": "failed",
+            "productStatus": "completed",
+            "bodyIncludes": ["现货速发"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "L31",
+      "name": "商品决策失败不抹掉已生成素材",
+      "rules": ["失败步骤可单独重跑"],
+      "source": "当前架构边界",
+      "steps": [
+        {"op": "reset"},
+        {"op": "turn", "text": "浅色沙发，预算3000元，宽度不超过180厘米，不要皮质"},
+        {"op": "confirm", "productId": "S01"},
+        {"op": "rerun-content", "momentsInput": {"outputKind": "rich", "productName": "云朵双人沙发", "sellingPoints": ["限时特价"], "copyStyle": "warm", "audience": "first_home"}},
+        {
+          "op": "rerun-research",
+          "forceFail": true,
+          "expect": {
+            "ok": false,
+            "confirmedUnchanged": true,
+            "materialKept": true,
+            "productStatus": "failed",
+            "contentStatus": "completed",
+            "bodyIncludes": ["限时特价"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "L32",
+      "name": "重新筛选但没换确认商品时不标待核对",
+      "rules": ["商品决策重跑", "没换商品不误标待核对"],
+      "source": "当前架构边界",
+      "steps": [
+        {"op": "reset"},
+        {"op": "turn", "text": "浅色沙发，预算3000元，宽度不超过180厘米，不要皮质"},
+        {"op": "confirm", "productId": "S01"},
+        {"op": "rerun-content", "momentsInput": {"outputKind": "rich", "productName": "云朵双人沙发", "sellingPoints": ["限时特价"], "copyStyle": "warm", "audience": "first_home"}},
+        {
+          "op": "rerun-research",
+          "constraints": {"budget_max_cny": 1, "category": "沙发"},
+          "expect": {
+            "ok": true,
+            "confirmedUnchanged": true,
+            "confirmedId": "S01",
+            "materialKept": true,
+            "pendingReview": false,
+            "candidateIds": [],
+            "candidateExcludes": ["S01"],
+            "contentStatus": "completed",
+            "entered": ["route", "product_decision"],
+            "bodyIncludes": ["限时特价"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "L33",
+      "name": "新预算使已确认商品不合格",
+      "rules": ["筛选结果", "素材待核对"],
+      "source": "验收包 M30",
+      "steps": [
+        {"op": "reset"},
+        {"op": "turn", "text": "浅色沙发，预算3000元，宽度不超过180厘米，不要皮质"},
+        {"op": "confirm", "productId": "S01"},
+        {"op": "rerun-content", "momentsInput": {"outputKind": "copy_only", "productName": "云朵双人沙发", "sellingPoints": ["现货速发"], "copyStyle": "warm", "audience": "first_home"}},
+        {
+          "op": "turn",
+          "text": "预算改成2400",
+          "expect": {
+            "confirmedId": null,
+            "candidateIds": ["S02"],
+            "pendingReview": true,
+            "bodyIncludes": ["现货速发"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "L34",
+      "name": "记下的预算不参与另一次筛选",
+      "rules": ["记忆不参与筛选", "记忆未验证"],
+      "source": "产品设计中的记忆边界；验收包 M38 的跨任务隔离",
+      "steps": [
+        {"op": "reset", "session": "acc_L34_a"},
+        {"op": "remember", "session": "acc_L34_a", "key": "本次约束", "value": "预算1元", "expect": {"lastMemoryVerified": false, "leadIncludes": ["不会变成筛选规则"]}},
+        {"op": "reset", "session": "acc_L34_b"},
+        {
+          "op": "turn",
+          "session": "acc_L34_b",
+          "text": "浅色沙发，预算3000元，宽度不超过180厘米，不要皮质",
+          "expect": {
+            "candidateIds": ["S01", "S02"],
+            "constraints": {"budget_max_cny": 3000}
+          }
+        },
+        {"op": "delete-memory", "session": "acc_L34_a", "expect": {"ok": true}}
+      ]
+    },
+    {
+      "id": "L35",
+      "name": "不虚报已经发布或下单",
+      "rules": ["不编造完成"],
+      "source": "验收包 M39",
+      "steps": [
+        {"op": "reset"},
+        {"op": "turn", "text": "直接发朋友圈并下单", "expect": {"leadIncludes": ["不能代为发布或下单"], "leadExcludes": ["已发布", "已下单"], "confirmedId": null, "enteredExcludes": ["content"]}}
+      ]
+    },
+    {
+      "id": "L36",
+      "name": "不能确认当前候选以外的商品",
+      "rules": ["确认权在商品决策"],
+      "source": "点选确认边界",
+      "steps": [
+        {"op": "reset"},
+        {"op": "turn", "text": "只看沙发，预算3000元"},
+        {"op": "confirm", "productId": "T01", "expect": {"ok": false, "confirmedId": null}}
+      ]
+    },
+    {
+      "id": "L37",
+      "name": "换成另一件确认商品后旧素材待核对",
+      "rules": ["换了确认商品才标待核对", "下一步仍是重新生成素材"],
+      "source": "当前界面调整",
+      "steps": [
+        {"op": "reset"},
+        {"op": "turn", "text": "浅色沙发，预算3000元，宽度不超过180厘米，不要皮质"},
+        {"op": "confirm", "productId": "S01"},
+        {"op": "rerun-content", "momentsInput": {"outputKind": "rich", "productName": "云朵双人沙发", "sellingPoints": ["现货速发"], "copyStyle": "warm", "audience": "first_home"}},
+        {
+          "op": "confirm",
+          "productId": "S02",
+          "expect": {
+            "ok": true,
+            "confirmedId": "S02",
+            "pendingReview": true,
+            "reviewIncludes": ["待核对", "重新生成素材"],
+            "bodyIncludes": ["现货速发"],
+            "workflowStatus": "待重跑",
+            "agentIncludes": ["待核对", "不能把不能叠加"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "L38",
+      "name": "没有这件商品时说明缺什么",
+      "rules": ["未找到不编造", "写明下一步"],
+      "source": "体验记录 03",
+      "steps": [
+        {"op": "reset"},
+        {
+          "op": "turn",
+          "text": "星河沙发",
+          "expect": {
+            "edge": "ask",
+            "entered": ["route"],
+            "candidateIds": [],
+            "confirmedId": null,
+            "leadIncludes": ["没有找到", "不会编造", "下一步", "资料缺失"],
+            "leadExcludes": ["无结果"],
+            "failureKind": "missing_data",
+            "enteredExcludes": ["content", "product_decision"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "L39",
+      "name": "商品库点选确认不经过筛选对话",
+      "rules": ["商品决策确认商品库中的一件", "内容不另选商品", "不改已有筛选窗口"],
+      "source": "素材生成单独选品",
+      "steps": [
+        {"op": "reset"},
+        {
+          "op": "confirm",
+          "productId": "G01",
+          "source": "catalog",
+          "expect": {
+            "ok": true,
+            "confirmedId": "G01",
+            "entered": ["route", "product_decision"],
+            "enteredExcludes": ["content"],
+            "leadIncludes": ["青石四门柜"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "L40",
+      "name": "同一疑点追问到上限后换说法",
+      "rules": ["按缺的那一项计数", "到上限不再重复同一句", "别的疑点另计"],
+      "source": "调用边界：追问",
+      "steps": [
+        {"op": "reset"},
+        {"op": "turn", "text": "便宜点", "expect": {"edge": "ask", "leadIncludes": ["还缺具体预算"], "leadExcludes": ["仍缺", "不能替你编"], "clarify": [{"doubt": "预算", "rounds": 1}], "enteredExcludes": ["product_decision", "content"]}},
+        {"op": "turn", "text": "便宜点", "expect": {"edge": "ask", "leadIncludes": ["还缺具体预算"], "leadExcludes": ["仍缺"], "clarify": [{"doubt": "预算", "rounds": 2}]}},
+        {"op": "turn", "text": "便宜点", "expect": {"edge": "ask", "leadIncludes": ["预算这一项仍缺", "不能替你编一个数", "点选商品"], "leadExcludes": ["还缺具体预算"], "clarify": [{"doubt": "预算", "rounds": 3}], "entered": ["route"], "enteredExcludes": ["product_decision", "content"]}},
+        {"op": "turn", "text": "小户型沙发", "expect": {"edge": "ask", "leadIncludes": ["还缺宽度上限"], "leadExcludes": ["不能替你编"], "clarify": [{"doubt": "宽度", "rounds": 1}, {"doubt": "预算", "rounds": 3}]}},
+        {"op": "sqlite", "expect": {"clarifyRounds": [{"doubt": "预算", "rounds": 3}, {"doubt": "宽度", "rounds": 1}]}}
+      ]
+    },
+    {
+      "id": "L41",
+      "name": "条件有效但没有符合商品",
+      "rules": ["无结果和资料缺失分开"],
+      "source": "调用边界：失败类型",
+      "steps": [
+        {"op": "reset"},
+        {"op": "turn", "text": "预算最多500元，只看沙发", "expect": {"edge": "product_decision", "candidateIds": [], "failureKind": "no_result", "leadIncludes": ["无结果", "没有同时符合", "不会自行放宽"], "leadExcludes": ["资料缺失", "参数错误", "网络错误"]}}
+      ]
+    },
+    {
+      "id": "L42",
+      "name": "预算上下限互相矛盾",
+      "rules": ["参数错误不进入筛选"],
+      "source": "调用边界：失败类型",
+      "steps": [
+        {"op": "reset"},
+        {"op": "turn", "text": "预算至少5000元，预算最多3000元", "expect": {"edge": "ask", "entered": ["route"], "enteredExcludes": ["product_decision", "content"], "failureKind": "bad_params", "candidateIds": [], "leadIncludes": ["参数错误", "无法解析"], "leadExcludes": ["无结果", "资料缺失", "网络错误"]}}
+      ]
+    },
+    {
+      "id": "L43",
+      "name": "商品决策达到本次上限后不再筛选",
+      "rules": ["子任务次数写入 sqlite", "到上限不再调用"],
+      "source": "调用边界：次数",
+      "steps": [
+        {"op": "reset"},
+        {"op": "turn", "text": "浅色沙发，预算3000元，宽度不超过180厘米，不要皮质"},
+        {"op": "confirm", "productId": "S01"},
+        {"op": "rerun-research"},
+        {"op": "rerun-research", "expect": {"ok": true, "confirmedId": "S01", "leadIncludes": ["已达本次上限", "商品决策"], "usage": {"product_decision": 3}, "materialKept": true}},
+        {"op": "sqlite", "expect": {"callUsed": {"product_decision": 3}}}
+      ]
+    },
+    {
+      "id": "L44",
+      "name": "内容生成达到本次上限后不再生成",
+      "rules": ["内容次数单独计数", "到上限保留已有素材"],
+      "source": "调用边界：次数",
+      "steps": [
+        {"op": "reset"},
+        {"op": "turn", "text": "浅色沙发，预算3000元，宽度不超过180厘米，不要皮质"},
+        {"op": "confirm", "productId": "S01"},
+        {"op": "rerun-content", "momentsInput": {"outputKind": "rich", "productName": "云朵双人沙发", "sellingPoints": ["现货速发"], "copyStyle": "warm", "audience": "first_home"}},
+        {"op": "rerun-content", "momentsInput": {"outputKind": "rich", "productName": "云朵双人沙发", "sellingPoints": ["现货速发"], "copyStyle": "warm", "audience": "first_home"}},
+        {"op": "rerun-content", "momentsInput": {"outputKind": "rich", "productName": "云朵双人沙发", "sellingPoints": ["现货速发"], "copyStyle": "warm", "audience": "first_home"}, "expect": {"ok": true, "confirmedId": "S01", "materialKept": true, "leadIncludes": ["已达本次上限", "内容生成"], "usage": {"content": 2, "image": 2}, "bodyIncludes": ["现货速发"]}},
+        {"op": "sqlite", "expect": {"callUsed": {"content": 2}}}
+      ]
+    },
+    {
+      "id": "L45",
+      "name": "资料检索达到本次上限后不再检索",
+      "rules": ["检索次数单独计数", "超出的商品不再检索"],
+      "source": "调用边界：次数",
+      "steps": [
+        {"op": "reset"},
+        {"op": "turn", "text": "只看沙发", "expect": {"ok": true, "usage": {"retrieve": 3, "product_decision": 1}, "someReasonIncludes": ["门店资料", "已达本次上限"], "leadIncludes": ["请点选要确认的商品"]}},
+        {"op": "sqlite", "expect": {"callUsed": {"retrieve": 3, "product_decision": 1}}}
+      ]
+    },
+    {
+      "id": "L46",
+      "name": "未核对的送装和质保降级",
+      "rules": ["高风险字段不能编造", "演示回放不假装网络错误"],
+      "source": "调用边界：降级",
+      "steps": [
+        {"op": "reset"},
+        {"op": "turn", "text": "浅色沙发，预算3000元，宽度不超过180厘米，不要皮质"},
+        {"op": "confirm", "productId": "S01"},
+        {
+          "op": "rerun-content",
+          "momentsInput": {"outputKind": "rich", "productName": "云朵双人沙发", "sellingPoints": ["现货速发"], "copyStyle": "warm", "audience": "first_home"},
+          "expect": {
+            "ok": true,
+            "confirmedId": "S01",
+            "generatedImageUrl": "",
+            "degradedIncludes": ["送装", "质保"],
+            "bodyIncludes": ["送装：未核对，不能当作事实", "质保：未核对，不能当作事实", "2699"],
+            "bodyExcludes": ["终身保修", "免费送装", "10年", "网络错误"],
+            "leadExcludes": ["网络错误"],
+            "usage": {"content": 1, "image": 1}
+          }
+        }
+      ]
+    },
+    {
+      "id": "L47",
+      "name": "生图达到本次上限后不再请求",
+      "rules": ["生图次数单独计数", "演示回放不假装网络错误"],
+      "source": "调用边界：次数",
+      "steps": [
+        {"op": "reset"},
+        {"op": "turn", "text": "浅色沙发，预算3000元，宽度不超过180厘米，不要皮质"},
+        {"op": "confirm", "productId": "S01"},
+        {"op": "rerun-content", "momentsInput": {"outputKind": "rich", "productName": "云朵双人沙发", "sellingPoints": ["现货速发"], "copyStyle": "warm", "audience": "first_home"}},
+        {"op": "rerun-content", "momentsInput": {"outputKind": "rich", "productName": "云朵双人沙发", "sellingPoints": ["现货速发"], "copyStyle": "warm", "audience": "first_home"}},
+        {"op": "image", "expect": {"ok": true, "leadIncludes": ["已达本次上限", "生图"], "leadExcludes": ["网络错误"], "usage": {"image": 2}}},
+        {"op": "sqlite", "expect": {"callUsed": {"image": 2, "content": 2}}}
+      ]
+    },
+    {
+      "id": "L48",
+      "name": "无结果时只试探放宽一个偏好",
+      "rules": ["约束标签", "敏感度只放宽一个偏好", "硬约束不自动放宽"],
+      "source": "导购可改的必须满足和优先考虑",
+      "steps": [
+        {"op": "reset"},
+        {
+          "op": "turn",
+          "text": "原木色沙发，预算8000元，宽度不超过300厘米，不要皮质",
+          "expect": {
+            "probeAbsent": true,
+            "tagStrength": {"color": "prefer", "budget_max_cny": "hard", "category": "hard", "exclude_material": "hard"},
+            "constraints": {"budget_max_cny": 8000, "width_max_cm": 300, "color": "原木色", "category": "沙发", "exclude_material": "皮质"},
+            "candidateIncludes": ["S01", "S04"],
+            "candidateExcludes": ["S03"],
+            "leadIncludes": ["已把", "优先考虑", "请点选"],
+            "leadExcludes": ["需要确认", "确认放宽"],
+            "agentIncludes": ["优先考虑", "直接筛选"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "L49",
+      "name": "优先考虑不作为硬筛选",
+      "rules": ["优先考虑只影响排序"],
+      "source": "导购可改的必须满足和优先考虑",
+      "steps": [
+        {"op": "reset"},
+        {
+          "op": "turn",
+          "text": "最好是原木色的沙发，预算8000元，宽度不超过300厘米，不要皮质",
+          "expect": {
+            "probeAbsent": true,
+            "tagStrength": {"color": "prefer", "budget_max_cny": "hard"},
+            "candidateIncludes": ["S01", "S04"],
+            "candidateExcludes": ["S03"],
+            "leadIncludes": ["请点选"],
+            "leadExcludes": ["试探只放宽"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "L50",
+      "name": "锁定的硬约束不做试探放宽",
+      "rules": ["必须满足不能自动放宽"],
+      "source": "导购可改的必须满足和优先考虑",
+      "steps": [
+        {"op": "reset"},
+        {
+          "op": "turn",
+          "text": "必须原木色的沙发，预算8000元，宽度不超过300厘米，不要皮质",
+          "expect": {
+            "candidateIds": [],
+            "probeAbsent": true,
+            "tagStrength": {"color": "hard"},
+            "tagLocked": {"color": true},
+            "failureKind": "no_result",
+            "leadIncludes": ["无结果", "不会自行放宽"],
+            "leadExcludes": ["试探只放宽"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "L51",
+      "name": "两项偏好都能放宽时才要求确认",
+      "rules": ["冲突才确认", "硬约束不自动放宽"],
+      "source": "导购只在约束冲突时确认",
+      "steps": [
+        {"op": "reset"},
+        {
+          "op": "turn",
+          "text": "米白自然沙发，预算8000元，宽度不超过300厘米",
+          "expect": {
+            "candidateIds": [],
+            "probeNeedsConfirm": true,
+            "probeAbsent": false,
+            "tagStrength": {"color": "hard", "style": "hard", "budget_max_cny": "hard"},
+            "leadIncludes": ["需要确认", "请选择放宽哪一项"],
+            "leadExcludes": ["已把", "请点选要确认的商品"]
+          }
+        },
+        {
+          "op": "accept-probe",
+          "field": "style",
+          "expect": {
+            "probeAbsent": true,
+            "tagStrength": {"style": "prefer", "color": "hard", "budget_max_cny": "hard"},
+            "candidateIncludes": ["S01"],
+            "candidateExcludes": ["S04"],
+            "leadIncludes": ["请点选"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "N01",
+      "name": "原版自动场景文件",
+      "executable": false,
+      "reason": "本机没有原版 eval_cases.json。本文件是按设计文档和验收包规则另写的本地检查，不是那 24 条或旧 20 条。"
+    },
+    {
+      "id": "N02",
+      "name": "真实模型文案",
+      "executable": false,
+      "reason": "未调用真实模型。演示回放不能当作模型效果。"
+    },
+    {
+      "id": "N03",
+      "name": "真实配图",
+      "executable": false,
+      "reason": "配图环境变量不齐，只保留占位，没有发明生图地址。"
+    },
+    {
+      "id": "N04",
+      "name": "商品改价后旧确认失效",
+      "executable": false,
+      "reason": "验收包 M29 要临时改商品版本。没有改共享价目，避免把演示资料改脏。"
+    },
+    {
+      "id": "N05",
+      "name": "表单和文字预算冲突",
+      "executable": false,
+      "reason": "验收包 M31 需要同一页同时提交两套预算。当前页面没有这组对照输入。"
+    },
+    {
+      "id": "N06",
+      "name": "暂停后的旧响应覆盖",
+      "executable": false,
+      "reason": "验收包 M33 需要可控延迟的模型响应。当前走演示回放，没有这组竞态。"
+    },
+    {
+      "id": "N07",
+      "name": "限流重试",
+      "executable": false,
+      "reason": "验收包 M34 要求模拟 429。这里不增加隐式重试，也不把未跑的重试记成通过。"
+    },
+    {
+      "id": "N08",
+      "name": "长历史压缩后旧条件不复活",
+      "executable": false,
+      "reason": "验收包 A08、M36 依赖注入几十条旧对话并压缩。当前没有这套压缩器。"
+    },
+    {
+      "id": "N09",
+      "name": "自然文案字数人工评分",
+      "executable": false,
+      "reason": "验收包 A07、A21、A22、M40 要真实草稿和人工打分。演示回放模板不能当成可直接采用的自然文案。"
+    },
+    {
+      "id": "N10",
+      "name": "公开商品样本",
+      "executable": false,
+      "reason": "本机没有 DummyJSON 或 public_products 样本，没有拿外币标价和人民币演示价混比。"
+    },
+    {
+      "id": "N11",
+      "name": "真实生文或生图的网络错误",
+      "executable": false,
+      "reason": "网络错误分支只在真实请求抛出网络或超时类错误时进入。这次演示回放没有发起真实请求，不会假装发生了网络错误。"
+    }
+  ]
+}

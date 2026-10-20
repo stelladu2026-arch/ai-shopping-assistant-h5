@@ -9,7 +9,7 @@ interface PhoneFrameOverlayProps {
 }
 
 /**
- * 与 MobileShell 手机框对齐：大屏侧栏/遮罩只在 360px 圆角设备区域内，不铺满整个浏览器。
+ * 与 MobileShell 手机框对齐：大屏侧栏/遮罩只在 430px 圆角设备区域内，不铺满整个浏览器。
  */
 export function PhoneFrameOverlay({ children, onBackdropClick, ariaLabel }: PhoneFrameOverlayProps) {
   return (
@@ -22,7 +22,7 @@ export function PhoneFrameOverlay({ children, onBackdropClick, ariaLabel }: Phon
       <div
         className={[
           "relative h-dvh w-full max-w-full overflow-hidden",
-          "sm:h-[min(800px,calc(100dvh-3rem))] sm:max-w-[360px] sm:rounded-[26px] sm:border sm:border-white/60 sm:shadow-device sm:ring-1 sm:ring-slate-900/[0.06]",
+          "sm:h-[min(800px,calc(100dvh-3rem))] sm:max-w-[430px] sm:rounded-[26px] sm:border sm:border-white/60 sm:shadow-device sm:ring-1 sm:ring-slate-900/[0.06]",
         ].join(" ")}
       >
         <button

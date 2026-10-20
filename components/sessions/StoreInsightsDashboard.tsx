@@ -1,89 +1,34 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { storeDashboardMock } from "@/mock/storeInsights";
+import type { StoreDashboardMetrics } from "@/types/store-insights";
 
-type CozeBanner =
-  | { status: "loading" }
-  | { status: "ok"; botCount: number }
-  | { status: "error"; message: string };
-
-export function StoreInsightsDashboard() {
-  const m = storeDashboardMock;
+export function StoreInsightsDashboard({ metrics }: { metrics: StoreDashboardMetrics | null }) {
+  if (!metrics) return null;
+  const m = metrics;
   const { product, campaign, copy: copyIntent } = m.intentShare;
-
-  const [coze, setCoze] = useState<CozeBanner>({ status: "loading" });
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/manager/coze/workspace-summary")
-      .then(async (res) => {
-        const data = (await res.json()) as { ok?: boolean; botCount?: number; error?: string };
-        if (cancelled) return;
-        if (res.ok && data.ok && typeof data.botCount === "number") {
-          setCoze({ status: "ok", botCount: data.botCount });
-        } else {
-          setCoze({
-            status: "error",
-            message: typeof data.error === "string" ? data.error : `请求失败 (${res.status})`,
-          });
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setCoze({ status: "error", message: "网络异常" });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const pct = (v: number) => `${Math.round(v * 100)}%`;
 
   const cards = [
-    ...(coze.status === "ok"
-      ? [
-          {
-            label: "Coze · 已发布 Bot",
-            value: String(coze.botCount),
-            hint: "当前 Workspace（开放平台 PAT）",
-          },
-        ]
-      : coze.status === "loading"
-        ? [
-            {
-              label: "Coze 连接",
-              value: "…",
-              hint: "正在校验开放平台与工作空间",
-            },
-          ]
-        : coze.status === "error"
-          ? [
-              {
-                label: "Coze 连接",
-                value: "—",
-                hint: coze.message,
-              },
-            ]
-          : []),
     {
       label: "活跃导购数",
       value: String(m.activeGuides),
-      hint: "本周有会话记录的导购",
+      hint: "近 7 天有会话的导购",
     },
     {
       label: "本周会话量",
       value: String(m.weeklySessionCount),
-      hint: "本店演示口径 · 自然周",
+      hint: "近 7 天已保存的会话",
     },
     {
       label: "意图分布",
       value: `${pct(product)} / ${pct(campaign)} / ${pct(copyIntent)}`,
-      hint: "产品 / 活动 / 文案（演示归类）",
+      hint: "产品 / 活动 / 文案",
     },
     {
       label: "复制率 · 重新生成率",
       value: `${pct(m.copyRate)} · ${pct(m.regenerateRate)}`,
-      hint: "基于本会话样本估算（演示）",
+      hint: "按已保存会话统计",
     },
   ];
 

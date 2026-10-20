@@ -3,6 +3,11 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import { PhoneFrameOverlay } from "@/components/home/PhoneFrameOverlay";
+import { MemoryPanel } from "@/components/home/MemoryPanel";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { useAppSettings } from "@/hooks/useAppSettings";
 import { useAuth } from "@/hooks/useAuth";
 import type { HomeProfileInfo } from "@/types/home";
@@ -61,6 +66,7 @@ export function SettingsDrawer({ open, onClose, profile }: SettingsDrawerProps) 
 
   const handleLogout = () => {
     logout();
+    setRole("guide");
     setPassword("");
     setLoginError(null);
   };
@@ -69,7 +75,7 @@ export function SettingsDrawer({ open, onClose, profile }: SettingsDrawerProps) 
 
   return createPortal(
     <PhoneFrameOverlay onBackdropClick={onClose} ariaLabel="设置">
-      <aside className="absolute right-0 top-0 flex h-full w-[min(20rem,92%)] max-w-[320px] flex-col bg-white shadow-[-8px_0_32px_rgba(15,23,42,0.12)]">
+      <aside className="absolute right-0 top-0 flex h-full w-[min(20rem,92%)] max-w-[320px] animate-in flex-col bg-card shadow-[-8px_0_32px_rgba(15,23,42,0.12)] slide-in-from-right duration-200">
         <div className="flex items-center justify-between border-b border-slate-100 px-3 py-3">
           <span className="text-[0.9rem] font-bold text-slate-900">设置</span>
           <button
@@ -99,71 +105,63 @@ export function SettingsDrawer({ open, onClose, profile }: SettingsDrawerProps) 
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-1.5">
                     <p className="truncate text-[0.92rem] font-bold text-slate-900">{session.displayName}</p>
-                    <span className="shrink-0 rounded-full border border-slate-200/90 bg-white px-2 py-0.5 text-[0.65rem] font-medium text-slate-500">
-                      {roleBadgeText(session.role)}
-                    </span>
+                    <Badge variant="outline">{roleBadgeText(session.role)}</Badge>
                   </div>
                   <p className="mt-1 text-[0.72rem] font-medium text-slate-500">工号 {session.employeeId}</p>
                   <p className="mt-0.5 text-[0.65rem] font-medium text-slate-400">账号 {session.username}</p>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="mt-4 w-full rounded-xl border border-slate-200/90 bg-white py-2.5 text-[0.82rem] font-semibold text-slate-700 shadow-sm transition-colors duration-75 active:bg-slate-100"
-              >
+              <Button type="button" variant="outline" className="mt-4 w-full" onClick={handleLogout}>
                 退出登录
-              </button>
+              </Button>
             </>
           ) : (
             <>
               <p className="mb-3 text-[0.72rem] font-medium leading-relaxed text-slate-500">
                 登录后可同步演示身份（导购 / 店长）。未登录时首页仍可使用访客体验数据。
               </p>
-              <form onSubmit={handleLogin} className="rounded-xl border border-slate-100 bg-slate-50/50 p-3">
-                <p className="mb-2.5 text-[0.78rem] font-bold text-slate-800">账号登录</p>
-                <label className="block">
-                  <span className="sr-only">账号</span>
-                  <input
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle>账号登录</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                <form onSubmit={handleLogin} className="space-y-3">
+                <label className="block space-y-1.5">
+                  <span className="text-xs font-medium text-muted-foreground">账号</span>
+                  <Input
                     type="text"
                     name="username"
                     autoComplete="username"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     placeholder="账号"
-                    className="mb-2 w-full rounded-lg border border-slate-200/90 bg-white px-3 py-2 text-[0.85rem] font-medium text-slate-900 outline-none ring-brand-500/0 transition-shadow duration-75 placeholder:text-slate-400 focus:border-brand-400 focus:ring-2 focus:ring-brand-500/25"
                   />
                 </label>
-                <label className="block">
-                  <span className="sr-only">密码</span>
-                  <input
+                <label className="block space-y-1.5">
+                  <span className="text-xs font-medium text-muted-foreground">密码</span>
+                  <Input
                     type="password"
                     name="password"
                     autoComplete="current-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="密码"
-                    className="mb-2 w-full rounded-lg border border-slate-200/90 bg-white px-3 py-2 text-[0.85rem] font-medium text-slate-900 outline-none ring-brand-500/0 transition-shadow duration-75 placeholder:text-slate-400 focus:border-brand-400 focus:ring-2 focus:ring-brand-500/25"
                   />
                 </label>
                 {loginError ? (
-                  <p className="mb-2 text-[0.72rem] font-semibold text-red-600" role="alert">
+                  <p className="text-[13px] font-semibold text-destructive" role="alert">
                     {loginError}
                   </p>
                 ) : null}
-                <button
-                  type="submit"
-                  disabled={!username.trim() || !password}
-                  className="w-full rounded-xl bg-brand-600 py-2.5 text-[0.82rem] font-bold text-white shadow-sm transition-colors duration-75 active:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
-                >
+                <Button type="submit" className="w-full" disabled={!username.trim() || !password}>
                   登录
-                </button>
-                <p className="mt-2.5 text-[0.65rem] leading-relaxed text-slate-500">
-                  演示账号：<span className="font-mono text-slate-600">guide01</span> /{" "}
-                  <span className="font-mono text-slate-600">manager01</span>，密码{" "}
-                  <span className="font-mono text-slate-600">demo123</span>
+                </Button>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  本地演示身份，不连接外部账号，页面不填写模型密钥。
                 </p>
-              </form>
+                </form>
+                </CardContent>
+              </Card>
               <div className="mt-4 flex items-start gap-3 rounded-xl border border-dashed border-slate-200/90 bg-white/80 px-3 py-3">
                 <div
                   className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[0.9rem] font-bold text-slate-500 shadow-inner ring-2 ring-white"
@@ -175,13 +173,12 @@ export function SettingsDrawer({ open, onClose, profile }: SettingsDrawerProps) 
                   <p className="text-[0.72rem] font-semibold text-slate-500">访客预览</p>
                   <p className="mt-0.5 truncate text-[0.88rem] font-bold text-slate-800">{profile.displayName}</p>
                   <p className="mt-0.5 text-[0.68rem] font-medium text-slate-500">工号 {profile.employeeId}</p>
-                  <span className="mt-1 inline-block rounded-full border border-slate-200/90 bg-slate-50 px-2 py-0.5 text-[0.65rem] font-medium text-slate-500">
-                    {roleLabel}
-                  </span>
+                  <Badge variant="muted" className="mt-1">{roleLabel}</Badge>
                 </div>
               </div>
             </>
           )}
+          {hydrated ? <MemoryPanel /> : null}
         </div>
       </aside>
     </PhoneFrameOverlay>,

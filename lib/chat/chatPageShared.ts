@@ -8,6 +8,7 @@ export const CHAT_FAIL_MSG = "请求失败，请稍后重试。";
 
 export const defaultMomentsInput: MomentsGenerationInput = {
   outputKind: "rich",
+  imageCount: 4,
   productName: "",
   sellingPoints: [],
   copyStyle: "warm",

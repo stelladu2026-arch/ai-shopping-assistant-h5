@@ -2,6 +2,11 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  serverExternalPackages: ["node:sqlite", "@langchain/langgraph", "@langchain/core"],
+  outputFileTracingIncludes: {
+    "/api/guide/act": ["./data/knowledge/**/*"],
+    "/api/agent/chat": ["./data/knowledge/**/*"],
+  },
   /**
    * 部分 Windows 环境下，原生文件监听会卡在 Starting / 首编译极久。
    * 开发态启用轮询可显著减少「永远不出 Ready」或假死。

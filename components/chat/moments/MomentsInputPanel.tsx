@@ -8,6 +8,8 @@ import {
   MOMENTS_SELLING_POINTS,
 } from "@/constants/chat-scenes";
 import type { MomentsGenerationInput, MomentsOutputKind } from "@/types/agent";
+import { CatalogPicker, type CatalogPickItem } from "@/components/chat/moments/CatalogPicker";
+import { PhoneFrameOverlay } from "@/components/home/PhoneFrameOverlay";
 
 const PRESET_POINTS = new Set<string>(MOMENTS_SELLING_POINTS);
 const MAX_SELLING_POINTS = 14;
@@ -16,7 +18,7 @@ const MAX_CUSTOM_LEN = 16;
 const MOMENTS_CTA_LABEL: Record<MomentsOutputKind, string> = {
   copy_only: "生成文案",
   image_only: "生成配图",
-  rich: "一键生成图文",
+  rich: "生成新图文",
 };
 
 interface MomentsInputPanelProps {
@@ -24,6 +26,22 @@ interface MomentsInputPanelProps {
   onChange: (next: MomentsGenerationInput) => void;
   onGenerate: () => void;
   generateDisabled: boolean;
+  /** 已确认商品事实。名称、价格和规格只读。要换件点更换商品。 */
+  facts?: {
+    name: string;
+    model: string;
+    price_cny: number;
+    width_cm: number;
+    color: string;
+    material: string;
+    style?: string;
+    promoNote: string;
+  } | null;
+  /** 没有已确认商品时，在本页点选商品库。 */
+  catalog?: CatalogPickItem[] | null;
+  onPickProduct?: (productId: string) => void;
+  /** 没有已确认商品，或还缺条件时的说明。不展示可编辑商品名。 */
+  blockedMessage?: string | null;
   /** 发送中：按钮文案与禁用态由外层 controlling */
   loading?: boolean;
   /**
@@ -32,6 +50,8 @@ interface MomentsInputPanelProps {
    * sheet：半屏配置抽屉内
    */
   variant?: "inline" | "dock" | "sheet";
+  /** 空白待选择。有值时卡片顶部显示该状态，不展示已生成文案或配图。 */
+  choiceStatus?: string | null;
 }
 
 export function MomentsInputPanel({
@@ -41,8 +61,14 @@ export function MomentsInputPanel({
   generateDisabled,
   loading = false,
   variant = "inline",
+  facts = null,
+  blockedMessage = null,
+  catalog = null,
+  onPickProduct,
+  choiceStatus = null,
 }: MomentsInputPanelProps) {
   const [customDraft, setCustomDraft] = useState("");
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const customSelected = useMemo(
     () => value.sellingPoints.filter((p) => !PRESET_POINTS.has(p)),
@@ -92,6 +118,7 @@ export function MomentsInputPanel({
   return (
     <div
       id={variant === "inline" || variant === "dock" ? "moments-input-panel" : undefined}
+      data-copy-card={choiceStatus ? "pending" : undefined}
       className={[
         "overflow-hidden rounded-saas border border-slate-200/70 bg-white shadow-surface ring-1 ring-slate-900/[0.04]",
         variant === "dock" ? "mx-3 mt-1.5 mb-0"
@@ -99,6 +126,11 @@ export function MomentsInputPanel({
         : "mx-0 mt-0 rounded-xl",
       ].join(" ")}
     >
+      {choiceStatus ? (
+        <div className="border-b border-slate-100 bg-white px-3 py-2.5">
+          <span className="text-[0.78rem] font-bold leading-snug text-slate-900">{choiceStatus}</span>
+        </div>
+      ) : null}
       <div className="border-b border-slate-100 px-3 py-2">
         <span className="text-[0.72rem] font-semibold text-slate-700">生成类型</span>
         <div className="mt-2 flex gap-1 rounded-xl bg-slate-100/80 p-0.5">
@@ -123,17 +155,80 @@ export function MomentsInputPanel({
         </div>
       </div>
 
-      <div className="space-y-3 px-3 py-3">
-        <div>
-          <label className="mb-1 block text-[0.72rem] font-semibold text-slate-600">商品名称</label>
-          <input
-            type="text"
-            value={value.productName}
-            onChange={(e) => onChange({ ...value, productName: e.target.value })}
-            placeholder="如：意式极简真皮沙发"
-            className="w-full rounded-xl border border-slate-200/80 bg-slate-50/80 px-3 py-2.5 text-[0.88rem] font-medium text-slate-900 placeholder:text-slate-400 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-          />
+      {value.outputKind !== "copy_only" ? (
+        <div className="border-b border-slate-100 px-3 py-3">
+          <p className="text-xs font-semibold text-slate-700">配图方案</p>
+          <div className="mt-2 flex gap-2" role="group" aria-label="配图张数">
+            {[{count:4 as const,label:"完整4张"},{count:1 as const,label:"试生成1张"}].map(option => (
+              <button key={option.count} type="button" aria-pressed={(value.imageCount ?? 4) === option.count}
+                disabled={loading} onClick={() => onChange({...value,imageCount:option.count})}
+                className={`min-h-11 flex-1 rounded-xl border px-3 py-2 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${(value.imageCount ?? 4) === option.count ? "border-brand-500 bg-brand-50 text-brand-900" : "border-slate-200 text-slate-600"}`}>
+                {option.label}
+              </button>
+            ))}
+          </div>
+          <p className="mt-2 text-xs leading-relaxed text-slate-500">{(value.imageCount ?? 4) === 4 ? "1张使用场景全景 + 3张细节图" : "先验证1张使用场景图"}。按实际出图张数计费，不自动补图。</p>
         </div>
+      ) : null}
+
+      <div className="space-y-3 px-3 py-3">
+        {blockedMessage ? (
+          <p className="rounded-xl bg-orange-50 px-3 py-3 text-[0.84rem] font-semibold leading-relaxed text-orange-900">{blockedMessage}</p>
+        ) : null}
+        {facts ? (
+          <div data-readonly="product-facts" className="rounded-xl bg-slate-50 px-3 py-3">
+            <p className="text-[0.72rem] font-semibold text-slate-500">名称、价格和规格不能手改。要换件，点「更换商品」。</p>
+            <p className="mt-1 text-[0.95rem] font-bold text-slate-900">{facts.name}</p>
+            <p className="mt-1 text-[0.8rem] leading-relaxed text-slate-700">型号 {facts.model}</p>
+            <p className="text-[0.8rem] leading-relaxed text-slate-700">价格 {facts.price_cny} 元</p>
+            <p className="text-[0.8rem] leading-relaxed text-slate-700">尺寸 宽 {facts.width_cm} 厘米</p>
+            <p className="text-[0.8rem] leading-relaxed text-slate-700">颜色 {facts.color}</p>
+            <p className="text-[0.8rem] leading-relaxed text-slate-700">材质 {facts.material}</p>
+            {facts.style ? <p className="text-[0.8rem] leading-relaxed text-slate-700">风格 {facts.style}</p> : null}
+            {facts.promoNote ? <p className="mt-1 text-[0.8rem] font-semibold leading-relaxed text-slate-800">{facts.promoNote}</p> : null}
+            <button
+              type="button"
+              onClick={() => setPickerOpen(true)}
+              className="mt-3 min-h-11 w-full rounded-xl border border-slate-200 bg-white text-[0.85rem] font-bold text-slate-800"
+            >
+              更换商品
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setPickerOpen(true)}
+            className="min-h-11 w-full rounded-xl bg-brand-600 text-[0.85rem] font-bold text-white active:bg-brand-700"
+          >
+            选择商品
+          </button>
+        )}
+        {pickerOpen && catalog && onPickProduct ? (
+          <PhoneFrameOverlay onBackdropClick={() => setPickerOpen(false)} ariaLabel="选择商品">
+            <div className="flex h-full flex-col bg-white">
+              <header className="flex shrink-0 items-center gap-2 border-b border-slate-200 px-3 py-3">
+                <button
+                  type="button"
+                  onClick={() => setPickerOpen(false)}
+                  className="min-h-11 rounded-xl px-3 text-[0.85rem] font-bold text-slate-700"
+                >
+                  返回
+                </button>
+                <h2 className="text-[0.95rem] font-bold text-slate-900">选择商品</h2>
+              </header>
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                <CatalogPicker
+                  items={catalog}
+                  disabled={loading}
+                  onPick={(productId) => {
+                    onPickProduct(productId);
+                    setPickerOpen(false);
+                  }}
+                />
+              </div>
+            </div>
+          </PhoneFrameOverlay>
+        ) : null}
 
         <div>
           <span className="mb-1.5 block text-[0.72rem] font-semibold text-slate-600">核心卖点（多选）</span>
@@ -273,7 +368,7 @@ export function MomentsInputPanel({
                 className="inline-block size-3.5 shrink-0 animate-spin rounded-full border-2 border-white/35 border-t-white"
                 aria-hidden
               />
-              <span>发送中…</span>
+              <span>生成中…</span>
             </>
           ) : (
             MOMENTS_CTA_LABEL[value.outputKind]

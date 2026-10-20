@@ -1,0 +1,10 @@
+[
+  {"id":"A","products":["S01","S02"],"store_id":"demo","start":"2026-01-01","end":"2027-12-31","discount_cny":100,"stack_with":["B"],"version":1},
+  {"id":"B","products":["S01"],"store_id":"demo","start":"2026-01-01","end":"2027-12-31","discount_cny":50,"stack_with":["A","C"],"version":1},
+  {"id":"C","products":["S01"],"store_id":"demo","start":"2026-01-01","end":"2027-12-31","discount_cny":80,"stack_with":["B"],"version":1},
+  {"id":"EXPIRED","products":["S01"],"store_id":"demo","start":"2020-01-01","end":"2020-12-31","discount_cny":500,"stack_with":[],"version":1},
+  {"id":"D","products":["S05","T03"],"store_id":"demo","start":"2026-01-01","end":"2027-12-31","discount_cny":120,"stack_with":["E"],"version":1},
+  {"id":"E","products":["S05"],"store_id":"demo","start":"2026-01-01","end":"2027-12-31","discount_cny":60,"stack_with":["D"],"version":1},
+  {"id":"F","products":["T03"],"store_id":"demo","start":"2026-01-01","end":"2027-12-31","discount_cny":90,"stack_with":[],"version":1},
+  {"id":"EXPIRED2","products":["S06"],"store_id":"demo","start":"2020-01-01","end":"2020-12-31","discount_cny":300,"stack_with":[],"version":1}
+]

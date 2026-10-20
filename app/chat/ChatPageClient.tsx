@@ -1,16 +1,19 @@
 "use client";
 
+import { fetchJsonResponse, requestErrorMessage } from "@/lib/request-deadline";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AssistantBubble } from "@/components/chat/AssistantBubble";
 import { ChatHeader } from "@/components/chat/ChatHeader";
+import { MomentsComposerBar } from "@/components/chat/moments/MomentsComposerBar";
 import { MomentsInputPanel } from "@/components/chat/moments/MomentsInputPanel";
 import { MomentsSetupSheet } from "@/components/chat/moments/MomentsSetupSheet";
-import { MomentsComposerBar } from "@/components/chat/moments/MomentsComposerBar";
 import { RagComposerBar } from "@/components/chat/rag/RagComposerBar";
 import { RagQuickAskBar } from "@/components/chat/rag/RagQuickAskBar";
 import { SessionHubSheet } from "@/components/chat/SessionHubSheet";
 import { SceneModeSwitch } from "@/components/chat/SceneModeSwitch";
+import { PriorMemory } from "@/components/chat/guide/PriorMemory";
+import { GuideProcess } from "@/components/chat/guide/GuideProcess";
 import { UserBubble } from "@/components/chat/UserBubble";
 import { MobileShell } from "@/components/home/MobileShell";
 import { canFavoriteMessage, isFavorited, toggleFavorite } from "@/lib/favorites";
@@ -21,19 +24,20 @@ import {
   removeRagQueryHistoryItem,
 } from "@/lib/ragQueryHistory";
 import { clearAllAppLocalStorage } from "@/lib/appLocalStorage";
+import { appendMomentsPiece, BLANK_COPY_STATUS, clearCopyReview, isGeneratedMomentsPiece, resetToBlankCopyCard } from "@/lib/chat/momentsPiece";
 import {
   agentChatRequest,
-  CHAT_FAIL_MSG,
   continueGenerateCtaLabel,
   defaultMomentsInput,
   id,
   parseMomentsOutputKind,
   toAgentPayload,
 } from "@/lib/chat/chatPageShared";
-import { buildSessionRecord, deriveSessionTitleDual, getSession, setLastActiveSessionId, upsertSession } from "@/lib/sessions";
+import { buildSessionRecord, getSession, sessionTitleFor, setLastActiveSessionId, upsertSession } from "@/lib/sessions";
 import { chatInitialMessages } from "@/mock/chat";
 import type {
   AgentScene,
+  GuideTurnBlock,
   MomentsGenerationInput,
   MomentsOutputKind,
 } from "@/types/agent";
@@ -44,7 +48,9 @@ export function ChatPageClient() {
   const searchParams = useSearchParams();
   const [sessionHydrated, setSessionHydrated] = useState(false);
   const [sessionId, setSessionId] = useState("");
-  const [sceneMode, setSceneMode] = useState<AgentScene>("moments_marketing");
+  const [sceneMode, setSceneMode] = useState<AgentScene>("store_rag_query");
+  const autoSentQuery = useRef(false);
+  const catalogConfirmRef = useRef(false);
   const [messagesMoments, setMessagesMoments] = useState<ChatMessage[]>(chatInitialMessages);
   const [messagesRag, setMessagesRag] = useState<ChatMessage[]>(chatInitialMessages);
   const messagesMomentsRef = useRef<ChatMessage[]>(messagesMoments);
@@ -67,6 +73,10 @@ export function ChatPageClient() {
   const [momentsSetupSheetOpen, setMomentsSetupSheetOpen] = useState(false);
   const [sending, setSending] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [guideTurn, setGuideTurn] = useState<GuideTurnBlock | null>(null);
+  const materialBlocked = guideTurn?.confirmedFacts
+    ? null
+    : "还没有确认商品。下一步：点「选择商品」，在商品列表里点一件。不必先走选品对话。";
 
   useEffect(() => {
     if (!toastMsg) return;
@@ -77,6 +87,68 @@ export function ChatPageClient() {
   useEffect(() => {
     setRagHistory(loadRagQueryHistory());
   }, []);
+
+  const loadSeq = useRef(0);
+  const loadGuide = useCallback(async (sid: string) => {
+    if (!sid) return;
+    const seq = ++loadSeq.current;
+    try {
+      const { response, payload } = await fetchJsonResponse("/api/guide/act", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "status", sessionId: sid }),
+      }, 15000);
+      if (seq !== loadSeq.current) return;
+      if (!response.ok) throw new Error("status_failed");
+      if (payload?.structured?.scene === "guide_turn") setGuideTurn(payload.structured);
+    } catch (error) {
+      if (seq === loadSeq.current) setToastMsg(requestErrorMessage(error));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!sessionHydrated || !sessionId) return;
+    void loadGuide(sessionId);
+  }, [sessionHydrated, sessionId, sceneMode, loadGuide]);
+
+  const confirmCatalogProduct = useCallback(async (productId: string) => {
+    if (!sessionId || sending) return;
+    setSending(true);
+    try {
+      const { response, payload } = await fetchJsonResponse("/api/guide/act", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "confirm",
+          source: "catalog",
+          productId,
+          sessionId,
+          revision: guideTurn?.revision,
+        }),
+      });
+      if (!response.ok) {
+        setToastMsg(payload.leadText || "没有确认成这件商品，请再点一次。");
+        if (payload?.structured?.scene === "guide_turn") setGuideTurn(payload.structured);
+        return;
+      }
+      if (payload?.structured?.scene === "guide_turn") setGuideTurn(payload.structured);
+      setSceneMode("moments_marketing");
+    } catch (error) {
+      setToastMsg(requestErrorMessage(error));
+    } finally {
+      setSending(false);
+      void loadGuide(sessionId);
+    }
+  }, [sessionId, sending, guideTurn?.revision, loadGuide]);
+
+  useEffect(() => {
+    if (!sessionHydrated || !sessionId || catalogConfirmRef.current) return;
+    const productId = searchParams.get("catalogProduct");
+    if (!productId) return;
+    catalogConfirmRef.current = true;
+    setSceneMode("moments_marketing");
+    void confirmCatalogProduct(productId);
+  }, [sessionHydrated, sessionId, searchParams, confirmCatalogProduct]);
 
   useEffect(() => {
     if (sceneMode !== "moments_marketing") setMomentsSetupSheetOpen(false);
@@ -113,10 +185,18 @@ export function ChatPageClient() {
     let sid = param?.trim() ?? "";
     if (!sid) {
       sid = `sess_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-      router.replace(`/chat?sessionId=${encodeURIComponent(sid)}`, { scroll: false });
+      const next = new URLSearchParams(searchParams.toString());
+      next.set("sessionId", sid);
+      router.replace(`/chat?${next.toString()}`, { scroll: false });
     }
+    const sameSession = sessionId === sid && messagesRagRef.current.length > 0;
     setSessionId(sid);
-    const rec = getSession(sid);
+    const rec = sameSession ? null : getSession(sid);
+    if (sameSession) {
+      if (sceneParam === "moments_marketing" || sceneParam === "store_rag_query") setSceneMode(sceneParam);
+      setSessionHydrated(true);
+      return;
+    }
     if (rec) {
       setMessagesMoments(rec.messagesMoments?.length ? rec.messagesMoments : chatInitialMessages);
       setMessagesRag(rec.messagesRag?.length ? rec.messagesRag : chatInitialMessages);
@@ -133,7 +213,7 @@ export function ChatPageClient() {
     } else {
       setMessagesMoments(chatInitialMessages);
       setMessagesRag(chatInitialMessages);
-      setSceneMode("moments_marketing");
+      setSceneMode("store_rag_query");
       setMomentsForm(defaultMomentsInput);
     }
 
@@ -155,12 +235,30 @@ export function ChatPageClient() {
   useEffect(() => {
     if (!sessionHydrated || !sessionId) return;
     const handle = window.setTimeout(() => {
+      const moments = messagesMomentsRef.current;
+      const rag = messagesRagRef.current;
       upsertSession(
-        buildSessionRecord(sessionId, messagesMomentsRef.current, messagesRagRef.current, sceneMode, {
+        buildSessionRecord(sessionId, moments, rag, sceneMode, {
           ...momentsForm,
           sellingPoints: [...momentsForm.sellingPoints],
         }),
       );
+      void fetchJsonResponse("/api/guide/act", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "sync",
+          sessionId,
+          customerName: getSession(sessionId)?.customerName || "",
+          transcript: {
+            title: sessionTitleFor(sessionId, moments, rag),
+            sceneMode,
+            messagesMoments: moments,
+            messagesRag: rag,
+            momentsForm,
+          },
+        }),
+      }, 15000).catch(() => { /* Local transcript is already saved; no automatic retry. */ });
     }, 450);
     return () => window.clearTimeout(handle);
   }, [sessionHydrated, sessionId, messagesMoments, messagesRag, sceneMode, momentsForm]);
@@ -184,10 +282,15 @@ export function ChatPageClient() {
     [momentsForm.outputKind],
   );
 
+  const showingBlankCopyCard = useMemo(
+    () => messagesMoments.some((item) => item.momentsChoice === "pending"),
+    [messagesMoments],
+  );
+
   const onToggleFavorite = useCallback(
     (message: ChatMessage) => {
       if (!sessionId) return;
-      const sessionTitle = deriveSessionTitleDual(messagesMomentsRef.current, messagesRagRef.current);
+      const sessionTitle = sessionTitleFor(sessionId, messagesMomentsRef.current, messagesRagRef.current);
       const r = toggleFavorite({ sessionId, sessionTitle, message });
       if (r === "added") setToastMsg("已加入收藏");
       else if (r === "removed") setToastMsg("已取消收藏");
@@ -195,48 +298,13 @@ export function ChatPageClient() {
     [sessionId],
   );
 
-  const handleContinueMomentsSetup = useCallback(() => {
-    const assistantId = lastMomentsAssistantId;
-    if (!assistantId || sending) return;
-    const prev = messagesMomentsRef.current;
-    const idx = prev.findIndex((m) => m.id === assistantId);
-    if (idx < 1) return;
-    const userMsg = prev[idx - 1];
-    const assistant = prev[idx];
-    if (userMsg.role !== "user" || assistant.role !== "assistant" || !assistant.structured) return;
-    if (assistant.structured.scene !== "moments_marketing") return;
-
-    const snap =
-      userMsg.momentsSnapshot ?? {
-        ...momentsForm,
-        sellingPoints: [...momentsForm.sellingPoints],
-      };
-    const editorMsg: ChatMessage = {
-      id: id("minline"),
-      role: "user",
-      text: "",
-      momentsInlineEditor: true,
-      momentsSnapshot: {
-        ...defaultMomentsInput,
-        ...snap,
-        sellingPoints: [...(snap.sellingPoints ?? [])],
-      },
+  const startNewPiece = useCallback(async (snap: MomentsGenerationInput) => {
+    if (!guideTurn?.confirmedFacts || sending) return;
+    const nextSnap: MomentsGenerationInput = {
+      ...snap,
+      productName: guideTurn.confirmedFacts.name,
+      sellingPoints: [...(snap.sellingPoints ?? [])],
     };
-    setMessagesMoments((p) => {
-      const cleaned = p.filter((m) => !m.momentsInlineEditor);
-      const i = cleaned.findIndex((m) => m.id === assistantId);
-      if (i < 0) return p;
-      return [...cleaned.slice(0, i + 1), editorMsg, ...cleaned.slice(i + 1)];
-    });
-    setMomentsForm(editorMsg.momentsSnapshot!);
-  }, [lastMomentsAssistantId, sending, momentsForm]);
-
-  const generateMoments = useCallback(async () => {
-    const snap: MomentsGenerationInput = {
-      ...momentsForm,
-      sellingPoints: [...momentsForm.sellingPoints],
-    };
-    if (!snap.productName.trim() || sending) return;
 
     setMomentsSetupSheetOpen(false);
 
@@ -244,41 +312,58 @@ export function ChatPageClient() {
       id: id("u"),
       role: "user",
       text: "",
-      momentsSnapshot: snap,
+      momentsSnapshot: nextSnap,
     };
 
-    const afterUser = [...messagesMomentsRef.current, userMsg];
+    const afterUser = [...messagesMomentsRef.current.filter((item) => !item.momentsInlineEditor), userMsg];
     setMessagesMoments(afterUser);
+    setMomentsForm(nextSnap);
     setSending(true);
 
     try {
       const payload = await agentChatRequest({
         scene: "moments_marketing",
         messages: afterUser.map(toAgentPayload),
-        momentsInput: snap,
+        sessionId,
+        momentsInput: nextSnap,
+        newPiece: true,
       });
-      setMessagesMoments((p) => [
-        ...p,
-        {
-          id: payload.messageId || id("a"),
-          role: "assistant",
-          leadText: payload.leadText,
-          structured: payload.structured,
-        },
-      ]);
-    } catch {
-      setMessagesMoments((p) => [
-        ...p,
-        {
-          id: id("a"),
-          role: "assistant",
-          leadText: CHAT_FAIL_MSG,
-        },
-      ]);
+      setMessagesMoments((current) => appendMomentsPiece(current, {
+        id: payload.messageId || id("a"),
+        role: "assistant",
+        leadText: payload.leadText,
+        structured: payload.structured,
+      }));
+    } catch (error) {
+      setMessagesMoments((current) => appendMomentsPiece(current, {
+        id: id("a"),
+        role: "assistant",
+        leadText: requestErrorMessage(error),
+      }));
     } finally {
       setSending(false);
+      if (sessionId) void loadGuide(sessionId);
     }
-  }, [momentsForm, sending]);
+  }, [sending, sessionId, guideTurn, loadGuide]);
+
+  const openBlankCopyCard = useCallback(() => {
+    if (sending) return;
+    setMomentsSetupSheetOpen(false);
+    setMessagesMoments((current) => resetToBlankCopyCard(current, momentsForm, id("choice")));
+    setGuideTurn((current) => clearCopyReview(current));
+  }, [sending, momentsForm]);
+
+  const handleContinueMomentsSetup = useCallback(() => {
+    openBlankCopyCard();
+  }, [openBlankCopyCard]);
+
+  const generateMoments = useCallback(() => {
+    if (messagesMomentsRef.current.some((item) => isGeneratedMomentsPiece(item))) {
+      openBlankCopyCard();
+      return;
+    }
+    void startNewPiece(momentsForm);
+  }, [momentsForm, openBlankCopyCard, startNewPiece]);
 
   const sendMomentsFollowUp = useCallback(async () => {
     const text = momentsFollowUpDraft.trim();
@@ -291,55 +376,68 @@ export function ChatPageClient() {
     };
 
     setMomentsFollowUpDraft("");
-    const afterUser = [...messagesMomentsRef.current, userMsg];
-    setMessagesMoments(afterUser);
+    setMessagesMoments((prev) => [...prev, userMsg]);
     setSending(true);
-
-    const momentsInput: MomentsGenerationInput = {
-      ...momentsForm,
-      sellingPoints: [...momentsForm.sellingPoints],
-    };
 
     try {
       const payload = await agentChatRequest({
-        scene: "moments_marketing",
-        messages: afterUser.map(toAgentPayload),
-        momentsInput,
+        scene: "store_rag_query",
+        messages: [{ role: "user", content: text }],
+        sessionId,
       });
-      setMessagesMoments((p) => [
-        ...p,
+      if (payload?.structured?.scene === "guide_turn") setGuideTurn(payload.structured);
+      setMessagesMoments((prev) => [
+        ...prev,
         {
           id: payload.messageId || id("a"),
           role: "assistant",
           leadText: payload.leadText,
-          structured: payload.structured,
         },
       ]);
-    } catch {
+      if (payload?.structured?.scene === "guide_turn") {
+        setMessagesRag((prev) => {
+          const next = {
+            id: payload.messageId || id("a"),
+            role: "assistant" as const,
+            leadText: payload.leadText,
+            structured: payload.structured,
+          };
+          let index = -1;
+          for (let i = prev.length - 1; i >= 0; i -= 1) {
+            if (prev[i].role === "assistant" && prev[i].structured?.scene === "guide_turn") {
+              index = i;
+              break;
+            }
+          }
+          if (index < 0) return [...prev, userMsg, next];
+          return [...prev.slice(0, index), userMsg, next, ...prev.slice(index + 1)];
+        });
+      }
+    } catch (error) {
       setMessagesMoments((p) => [
         ...p,
         {
           id: id("a"),
           role: "assistant",
-          leadText: CHAT_FAIL_MSG,
+          leadText: requestErrorMessage(error),
         },
       ]);
     } finally {
       setSending(false);
+      if (sessionId) void loadGuide(sessionId);
     }
-  }, [momentsFollowUpDraft, momentsForm, sending]);
+  }, [momentsFollowUpDraft, sending, sessionId, loadGuide]);
 
-  const sendRag = useCallback(async () => {
-    const text = ragDraft.trim();
-    if (!text || sending) return;
+  const sendRagText = useCallback(async (text: string, file: File | null) => {
+    const trimmed = text.trim();
+    if (!trimmed || sending) return;
 
-    const attachmentName = ragFile?.name;
     const userMsg: ChatMessage = {
       id: id("u"),
       role: "user",
-      text: [text, ragFile ? `【已选凭证】${ragFile.name}` : ""].filter(Boolean).join("\n"),
-      ragQuery: text,
-      ragAttachmentNote: attachmentName,
+      text: [trimmed, file ? `【已选凭证】${file.name}` : ""].filter(Boolean).join("\n"),
+      ragQuery: trimmed,
+      ragAttachmentNote: file?.name,
     };
 
     setRagDraft("");
@@ -353,8 +451,10 @@ export function ChatPageClient() {
       const payload = await agentChatRequest({
         scene: "store_rag_query",
         messages: afterUser.map(toAgentPayload),
-        attachmentNote: attachmentName,
+        attachmentNote: file?.name,
+        sessionId,
       });
+      if (payload?.structured?.scene === "guide_turn") setGuideTurn(payload.structured);
       setMessagesRag((p) => [
         ...p,
         {
@@ -364,24 +464,28 @@ export function ChatPageClient() {
           structured: payload.structured,
         },
       ]);
-      setRagHistory(appendRagQueryHistory(text));
-    } catch {
+      setRagHistory(appendRagQueryHistory(trimmed));
+    } catch (error) {
       setMessagesRag((p) => [
         ...p,
         {
           id: id("a"),
           role: "assistant",
-          leadText: CHAT_FAIL_MSG,
+          leadText: requestErrorMessage(error),
         },
       ]);
     } finally {
       setSending(false);
     }
-  }, [ragDraft, ragFile, sending]);
+  }, [sending, sessionId]);
+
+  const sendRag = useCallback(() => {
+    void sendRagText(ragDraft, ragFile);
+  }, [sendRagText, ragDraft, ragFile]);
 
   const onRagPreset = useCallback((q: string) => {
-    setRagDraft((d) => (d ? `${d} ${q}` : q));
-  }, []);
+    void sendRagText(q, null);
+  }, [sendRagText]);
 
   const onRagHistoryPick = useCallback((q: string) => {
     setRagDraft(q);
@@ -409,8 +513,16 @@ export function ChatPageClient() {
     async (editorId: string) => {
       const list = messagesMomentsRef.current;
       const ed = list.find((m) => m.id === editorId);
-      const snap = ed?.momentsSnapshot;
-      if (!snap?.productName.trim() || sending) return;
+      if (!guideTurn?.confirmedFacts || sending) return;
+      const snap = {
+        ...ed?.momentsSnapshot,
+        outputKind: ed?.momentsSnapshot?.outputKind || momentsForm.outputKind,
+        imageCount: ed?.momentsSnapshot?.imageCount ?? momentsForm.imageCount ?? 4,
+        productName: guideTurn.confirmedFacts.name,
+        sellingPoints: [...(ed?.momentsSnapshot?.sellingPoints ?? momentsForm.sellingPoints)],
+        copyStyle: ed?.momentsSnapshot?.copyStyle || momentsForm.copyStyle,
+        audience: ed?.momentsSnapshot?.audience || momentsForm.audience,
+      };
 
       setMomentsSetupSheetOpen(false);
 
@@ -431,31 +543,27 @@ export function ChatPageClient() {
         const payload = await agentChatRequest({
           scene: "moments_marketing",
           messages: afterUser.map(toAgentPayload),
+          sessionId,
           momentsInput: snap,
+          newPiece: true,
         });
-        setMessagesMoments((p) => [
-          ...p,
-          {
-            id: payload.messageId || id("a"),
-            role: "assistant",
-            leadText: payload.leadText,
-            structured: payload.structured,
-          },
-        ]);
-      } catch {
-        setMessagesMoments((p) => [
-          ...p,
-          {
-            id: id("a"),
-            role: "assistant",
-            leadText: CHAT_FAIL_MSG,
-          },
-        ]);
+        setMessagesMoments((current) => appendMomentsPiece(current, {
+          id: payload.messageId || id("a"),
+          role: "assistant",
+          leadText: payload.leadText,
+          structured: payload.structured,
+        }));
+      } catch (error) {
+        setMessagesMoments((current) => appendMomentsPiece(current, {
+          id: id("a"),
+          role: "assistant",
+          leadText: requestErrorMessage(error),
+        }));
       } finally {
         setSending(false);
       }
     },
-    [sending],
+    [sending, guideTurn, momentsForm, sessionId],
   );
 
   const setAssistantFeedback = useCallback((messageId: string, vote: ContentFeedbackVote | null) => {
@@ -481,12 +589,12 @@ export function ChatPageClient() {
         assistant.structured.scene === "moments_marketing" ? "moments_marketing" : "store_rag_query";
 
       if (scene === "moments_marketing") {
-        const snap =
-          userMsg.momentsSnapshot ?? {
-            ...momentsForm,
-            sellingPoints: [...momentsForm.sellingPoints],
-          };
-        if (!snap.productName.trim()) return;
+        const snap = {
+          ...(userMsg.momentsSnapshot ?? momentsForm),
+          productName: guideTurn?.confirmedFacts?.name || userMsg.momentsSnapshot?.productName || momentsForm.productName,
+          sellingPoints: [...(userMsg.momentsSnapshot?.sellingPoints ?? momentsForm.sellingPoints)],
+        };
+        if (!guideTurn?.confirmedFacts) return;
 
         const prefix = prev.slice(0, idx);
         const loadingId = id("regen");
@@ -501,7 +609,10 @@ export function ChatPageClient() {
           const payload = await agentChatRequest({
             scene: "moments_marketing",
             messages: prefix.map(toAgentPayload),
+            sessionId,
             momentsInput: snap,
+            newPiece: false,
+            pieceId: assistant.structured.scene === "moments_marketing" ? assistant.structured.pieceId || "" : "",
           });
           setMessagesMoments((p) => {
             const i = p.findIndex((m) => m.id === loadingId);
@@ -516,7 +627,7 @@ export function ChatPageClient() {
               },
             ];
           });
-        } catch {
+        } catch (error) {
           setMessagesMoments((p) => {
             const i = p.findIndex((m) => m.id === loadingId);
             if (i < 0) return p;
@@ -525,7 +636,7 @@ export function ChatPageClient() {
               {
                 id: id("a"),
                 role: "assistant",
-                leadText: CHAT_FAIL_MSG,
+                leadText: requestErrorMessage(error),
               },
             ];
           });
@@ -563,7 +674,7 @@ export function ChatPageClient() {
             },
           ];
         });
-      } catch {
+      } catch (error) {
         setMessagesRag((p) => {
           const i = p.findIndex((m) => m.id === loadingId);
           if (i < 0) return p;
@@ -572,7 +683,7 @@ export function ChatPageClient() {
             {
               id: id("a"),
               role: "assistant",
-              leadText: CHAT_FAIL_MSG,
+              leadText: requestErrorMessage(error),
             },
           ];
         });
@@ -580,14 +691,110 @@ export function ChatPageClient() {
         setSending(false);
       }
     },
-    [momentsForm, sending],
+    [momentsForm, sending, sessionId, guideTurn],
   );
+
+  const runGuideAction = useCallback(async (body: Record<string, unknown>) => {
+    if (body.action === "favorite") {
+      const message = [...messagesRagRef.current].reverse().find((item) => item.role === "assistant" && item.structured?.scene === "guide_turn" && item.structured.confirmedName);
+      if (message && sessionId) {
+        const result = toggleFavorite({
+          sessionId,
+          sessionTitle: sessionTitleFor(sessionId, messagesMomentsRef.current, messagesRagRef.current),
+          message,
+        });
+        setToastMsg(result === "added" ? "已收藏这件商品" : result === "removed" ? "已取消收藏" : "还不能收藏");
+      }
+      return;
+    }
+    if (body.action === "open-material") {
+      const productName = String(body.productName || "");
+      if (productName) {
+        setMomentsForm((prev) => ({ ...prev, productName, outputKind: prev.outputKind || "rich" }));
+      }
+      setSceneMode("moments_marketing");
+      return;
+    }
+    if (sending) return;
+    setSending(true);
+    try {
+      const { response, payload } = await fetchJsonResponse("/api/guide/act", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...body, sessionId }),
+      }, body.action === "image" || body.action === "rerun-content" ? 150000 : 60000);
+      if (!response.ok) {
+        setToastMsg(payload.leadText || (payload.error === "revision_conflict" ? "页面已更新，请再试一次。" : "没有完成，请再试一次。"));
+        if (payload?.structured?.scene === "guide_turn") setGuideTurn(payload.structured);
+        return;
+      }
+      if (payload?.structured?.scene === "guide_turn") setGuideTurn(payload.structured);
+      const action = String(body.action || "");
+      const userText = action === "confirm"
+        ? `确认了${payload.structured?.confirmedName || "这件商品"}`
+        : action === "remember"
+          ? (body.key === "已确认商品" ? "记住已确认商品" : "记住这次约束")
+          : "";
+      setMessagesRag((prev) => {
+        const user = userText ? [{ id: id("u"), role: "user" as const, text: userText }] : [];
+        const next = {
+          id: payload.messageId || id("a"),
+          role: "assistant" as const,
+          leadText: payload.leadText,
+          structured: payload.structured,
+        };
+        let index = -1;
+        for (let i = prev.length - 1; i >= 0; i -= 1) {
+          const item = prev[i];
+          if (item.role === "assistant" && item.structured?.scene === "guide_turn") {
+            index = i;
+            break;
+          }
+        }
+        if (index < 0) return [...prev, ...user, next];
+        return [...prev.slice(0, index), ...user, next, ...prev.slice(index + 1)];
+      });
+    } catch (error) {
+      setToastMsg(requestErrorMessage(error));
+    } finally {
+      setSending(false);
+      if (sessionId) void loadGuide(sessionId);
+    }
+  }, [sessionId, sending, loadGuide]);
+
+  useEffect(() => {
+    if (!sessionHydrated || autoSentQuery.current) return;
+    const query = searchParams.get("q");
+    if (!query) return;
+    autoSentQuery.current = true;
+    setSceneMode("store_rag_query");
+    setRagDraft("");
+    const userMsg: ChatMessage = { id: id("u"), role: "user", text: query, ragQuery: query };
+    const afterUser = [...messagesRagRef.current, userMsg];
+    setMessagesRag(afterUser);
+    setSending(true);
+    void agentChatRequest({
+      scene: "store_rag_query",
+      messages: afterUser.map(toAgentPayload),
+      sessionId,
+    }).then((payload) => {
+      if (payload?.structured?.scene === "guide_turn") setGuideTurn(payload.structured);
+      setMessagesRag((prev) => [...prev, {
+        id: payload.messageId || id("a"),
+        role: "assistant",
+        leadText: payload.leadText,
+        structured: payload.structured,
+      }]);
+    }).catch((error) => {
+      setMessagesRag((prev) => [...prev, { id: id("a"), role: "assistant", leadText: requestErrorMessage(error) }]);
+    }).finally(() => setSending(false));
+  }, [sessionHydrated, searchParams, sessionId]);
 
   return (
     <MobileShell
       footer={
         sceneMode === "store_rag_query" ? (
-          <div className="border-t border-slate-200/50 bg-white/95 shadow-[0_-4px_20px_-4px_rgba(15,23,42,0.06)]">
+          <div className="w-full min-w-0 overflow-hidden border-t border-border bg-card shadow-[0_-4px_20px_-4px_rgba(15,23,42,0.06)]">
             <RagQuickAskBar onPickPreset={onRagPreset} />
             <RagComposerBar
               value={ragDraft}
@@ -599,8 +806,8 @@ export function ChatPageClient() {
               sending={sending}
             />
           </div>
-        ) : sceneMode === "moments_marketing" ? (
-          <div className="border-t border-slate-200/50 bg-white/95 shadow-[0_-4px_20px_-4px_rgba(15,23,42,0.06)]">
+        ) : (
+          <div className="w-full min-w-0 overflow-hidden border-t border-border bg-card pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_20px_-4px_rgba(15,23,42,0.06)]">
             <MomentsComposerBar
               value={momentsFollowUpDraft}
               onChange={setMomentsFollowUpDraft}
@@ -609,7 +816,7 @@ export function ChatPageClient() {
               sending={sending}
             />
           </div>
-        ) : null
+        )
       }
     >
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
@@ -629,19 +836,30 @@ export function ChatPageClient() {
             }}
           />
           <SceneModeSwitch value={sceneMode} onChange={setSceneMode} />
+          {sessionHydrated && sceneMode === "store_rag_query" ? <PriorMemory sessionId={sessionId} revision={messagesRag.length} /> : null}
           <div
-            className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain px-0 pb-4 pt-2 tech-scroll [scrollbar-gutter:stable_both-edges]"
+            key={sceneMode}
+            className="min-h-0 flex-1 animate-in fade-in space-y-1 overflow-y-auto overscroll-contain px-0 pb-4 pt-2 duration-200 tech-scroll [scrollbar-gutter:stable_both-edges]"
             aria-busy={sending}
           >
-            {sessionHydrated && sceneMode === "moments_marketing" && !momentsSetupSheetOpen ? (
+            {sessionHydrated && sceneMode === "moments_marketing" && guideTurn?.material?.pendingReview && !showingBlankCopyCard ? (
+              <p className="mx-3 mb-2 rounded-xl bg-orange-50 px-3 py-3 text-[0.84rem] font-semibold leading-relaxed text-orange-900">
+                待核对。{guideTurn.material.reviewNote || "上一套文案和配图还不能直接用。下一步：点重新生成素材。"}
+              </p>
+            ) : null}
+            {sessionHydrated && sceneMode === "moments_marketing" && !momentsSetupSheetOpen && !showingBlankCopyCard ? (
               <div className="shrink-0 px-0">
                 <MomentsInputPanel
                   variant="inline"
                   loading={sending}
                   value={momentsForm}
+                  facts={guideTurn?.confirmedFacts || null}
+                  blockedMessage={materialBlocked}
+                  catalog={guideTurn?.catalog || []}
+                  onPickProduct={(productId) => void confirmCatalogProduct(productId)}
                   onChange={setMomentsForm}
                   onGenerate={generateMoments}
-                  generateDisabled={sending || !momentsForm.productName.trim()}
+                  generateDisabled={sending || !guideTurn?.confirmedFacts}
                 />
               </div>
             ) : null}
@@ -656,9 +874,14 @@ export function ChatPageClient() {
                         variant="inline"
                         loading={sending}
                         value={m.momentsSnapshot}
+                        facts={guideTurn?.confirmedFacts || null}
+                        blockedMessage={materialBlocked}
+                        catalog={guideTurn?.catalog || []}
+                        onPickProduct={(productId) => void confirmCatalogProduct(productId)}
                         onChange={(next) => updateInlineMoments(m.id, next)}
                         onGenerate={() => void generateFromInlineMoments(m.id)}
-                        generateDisabled={sending || !m.momentsSnapshot.productName.trim()}
+                        generateDisabled={sending || !guideTurn?.confirmedFacts}
+                        choiceStatus={m.momentsChoice === "pending" ? BLANK_COPY_STATUS : null}
                       />
                     </div>
                   );
@@ -692,10 +915,16 @@ export function ChatPageClient() {
                     onContinueGenerate={handleContinueMomentsSetup}
                     continueGenerateLabel={continueGenerateLabel}
                     onMomentsDownloadHint={(msg) => setToastMsg(msg)}
+                    onGuideAction={(body) => void runGuideAction(body)}
                   />
                 );
               })
             )}
+            {sessionHydrated && sceneMode === "moments_marketing" && (guideTurn?.process || guideTurn?.reflection?.checks?.length) ? (
+              <div className="px-3 pt-2">
+                <GuideProcess process={guideTurn.process} reflection={guideTurn.reflection} />
+              </div>
+            ) : null}
           </div>
         </div>
         <SessionHubSheet
@@ -714,9 +943,13 @@ export function ChatPageClient() {
             variant="sheet"
             loading={sending}
             value={momentsForm}
+            facts={guideTurn?.confirmedFacts || null}
+            blockedMessage={materialBlocked}
+            catalog={guideTurn?.catalog || []}
+            onPickProduct={(productId) => void confirmCatalogProduct(productId)}
             onChange={setMomentsForm}
             onGenerate={generateMoments}
-            generateDisabled={sending || !momentsForm.productName.trim()}
+            generateDisabled={sending || !guideTurn?.confirmedFacts}
           />
         </MomentsSetupSheet>
       </div>

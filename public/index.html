@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#f4f6f9">
+  <title>导购助手</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <div class="app">
+    <section id="home" class="screen">
+      <header class="topbar">
+        <div class="title-block">
+          <h1>导购助手</h1>
+          <p class="meta">演示门店</p>
+        </div>
+        <button type="button" class="icon-btn tap" id="open-settings" aria-label="设置">⚙</button>
+      </header>
+      <main class="sheet">
+        <h2 class="kicker">继续上次会话</h2>
+        <div id="continue-card" class="card"></div>
+        <h2 class="kicker">功能入口</h2>
+        <div class="card menu">
+          <button type="button" class="menu-row tap" id="open-search">
+            <span class="mark">选</span>
+            <span><strong>选品推荐</strong><small>按预算、尺寸、颜色和材质查询商品</small></span>
+          </button>
+          <button type="button" class="menu-row tap" id="open-copy">
+            <span class="mark">话</span>
+            <span><strong>推荐话术</strong><small>确认商品后生成有依据的话术</small></span>
+          </button>
+        </div>
+        <h2 class="kicker">常用提问</h2>
+        <div class="card prompts" id="home-prompts"></div>
+      </main>
+    </section>
+
+    <section id="sessions" class="screen" hidden>
+      <header class="topbar">
+        <div class="title-block">
+          <button type="button" class="text-btn back" id="sessions-home">首页</button>
+          <h1>会话中心</h1>
+        </div>
+        <button type="button" class="pill tap" id="new-chat">新对话</button>
+      </header>
+      <main class="sheet">
+        <div class="segment" role="tablist">
+          <button type="button" class="seg tap is-on" id="tab-recent" aria-pressed="true">最近会话</button>
+          <button type="button" class="seg tap" id="tab-favorites" aria-pressed="false">收藏</button>
+        </div>
+        <div id="session-list" class="list"></div>
+      </main>
+    </section>
+
+    <section id="chat" class="screen" hidden>
+      <header class="topbar">
+        <button type="button" class="text-btn back" id="chat-back">返回</button>
+        <div class="title-block">
+          <h1 id="chat-title">选品推荐</h1>
+        </div>
+        <button type="button" class="icon-btn tap" id="chat-settings" aria-label="设置">⚙</button>
+      </header>
+      <div class="segment chat-seg" role="tablist">
+        <button type="button" class="seg tap" data-scene="search">选品推荐</button>
+        <button type="button" class="seg tap" data-scene="copy">推荐话术</button>
+      </div>
+      <button type="button" class="text-btn tap customer-name" id="rename-current">改成客户名</button>
+      <div id="progress" class="progress"></div>
+      <div id="facts" class="facts" hidden>
+        <div id="fact-body"></div>
+      </div>
+      <main id="thread" class="thread"></main>
+      <div id="suggest" class="suggest"></div>
+      <form id="composer" class="composer">
+        <input id="message" name="message" autocomplete="off" enterkeyhint="send" placeholder="说说预算、尺寸或颜色">
+        <button class="send tap" type="submit">发送</button>
+      </form>
+    </section>
+
+    <section id="settings" class="screen" hidden>
+      <header class="topbar">
+        <button type="button" class="text-btn back" id="settings-back">返回</button>
+        <div class="title-block">
+          <h1>设置</h1>
+        </div>
+        <span class="top-side"></span>
+      </header>
+      <main class="sheet">
+        <h2 class="kicker">运行方式</h2>
+        <div class="card pad" id="mode-card"></div>
+        <h2 class="kicker">导购语气</h2>
+        <div class="card pad">
+          <p id="tone-line" class="muted">还没有记住语气。这是导购自己的偏好，不会写进这次选品条件。</p>
+          <div class="row">
+            <button type="button" class="chip-btn tap" data-tone="简洁">记住简洁</button>
+            <button type="button" class="chip-btn tap" data-tone="热情">记住热情</button>
+            <button type="button" class="chip-btn tap" id="forget-tone">删除</button>
+          </div>
+        </div>
+        <h2 class="kicker">记下的内容</h2>
+        <div class="card pad" id="memory-card"></div>
+      </main>
+    </section>
+
+    <form id="rename-sheet" class="rename" hidden>
+      <div class="rename-card">
+        <p class="rename-title">把这份会话改成客户名</p>
+        <input id="rename-input" name="customer" maxlength="20" placeholder="客户名称" autocomplete="name">
+        <div class="row">
+          <button class="confirm tap" type="submit">保存</button>
+          <button class="text-btn tap" type="button" id="rename-clear">恢复成提问</button>
+          <button class="text-btn tap" type="button" id="rename-cancel">取消</button>
+        </div>
+      </div>
+    </form>
+    <div id="constraint-dialog" class="constraint-dialog" hidden>
+      <div class="constraint-backdrop" id="constraint-backdrop"></div>
+      <div class="constraint-panel" id="constraint-panel" role="dialog" aria-modal="true" aria-labelledby="constraint-dialog-title" tabindex="-1">
+        <h2 id="constraint-dialog-title">识别出的条件</h2>
+        <div id="constraint-fields"></div>
+        <p id="constraint-error" class="constraint-error" hidden></p>
+        <div class="constraint-actions">
+          <button type="button" class="text-btn tap" id="constraint-cancel">取消</button>
+          <button type="button" class="send tap" id="constraint-save">保存</button>
+        </div>
+      </div>
+    </div>
+    <nav class="tabbar" id="tabbar">
+      <button type="button" class="tab tap" data-screen="home" aria-current="page">首页</button>
+      <button type="button" class="tab tap" data-screen="sessions">会话中心</button>
+    </nav>
+  </div>
+  <script src="/app.js" type="module"></script>
+</body>
+</html>
