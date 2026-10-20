@@ -329,7 +329,9 @@ async function check(executeImage) {
   assert.equal(urlError.called, true);
   assert.equal(urlError.simulation, false);
   assert.equal(urlError.url, "");
-  assert.equal(urlError.label, "生图接口返回 HTTP 400（/images/generations）：url error, please check url！ For details, see: https://www.alibabacloud.com/help");
+  assert.match(urlError.label, /生图接口返回 HTTP 400/);
+  assert.match(urlError.label, /模型与接口可能不匹配/);
+  assert.match(urlError.label, /image-fixture/);
   assert.equal(urlError.label.includes("image-test"), false);
   assert.equal(urlError.label.includes("image.test.local"), false);
   assert.equal(urlError.label.includes("/demo/"), false);
@@ -343,7 +345,9 @@ async function check(executeImage) {
     code: "InvalidParameter",
     message: "url error, please check url！ For details, see: https://www.alibabacloud.com/help",
   }));
-  assert.equal(pathError.label, "生图接口返回 HTTP 400（/api/v1/services/aigc/multimodal-generation/generation）：url error, please check url！ For details, see: https://www.alibabacloud.com/help");
+  assert.match(pathError.label, /模型与接口可能不匹配/);
+  assert.match(pathError.label, /qwen-image-plus/);
+  assert.match(pathError.label, /multimodal-generation/);
   assert.equal(pathError.label.includes("dashscope"), false);
   assert.equal(pathError.label.includes("token"), false);
   assert.equal(pathError.label.includes("image-test"), false);

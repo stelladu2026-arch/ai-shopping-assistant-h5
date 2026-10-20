@@ -341,7 +341,11 @@ async function finishImage(response, request, secret = '', known, endpoint) {
   const payload = known === undefined ? await readPayload(response) : known;
   const quota = isQuotaFailure(status, payload, '');
   if (!response?.ok) {
-    const label = status > 0 ? httpFailureLabel(status, payload, secret, endpoint || request?.url) : '返回里没有图片地址';
+    let label = status > 0 ? httpFailureLabel(status, payload, secret, endpoint || request?.url) : '返回里没有图片地址';
+    if (status === 400 && /url error,?\s*please check url/i.test(providerDetail(payload, secret))) {
+      const model = redactDetail(request?.body?.model || '', secret);
+      label = `生图接口返回 HTTP 400：模型与接口可能不匹配。当前模型「${model}」（${requestPath(endpoint || request?.url)}）。请核对 IMAGE_MODEL、接口协议和业务空间；运行 npm run doctor 查看生效配置。`;
+    }
     const requestId = redactDetail(String(payload?.request_id || response?.headers?.get?.('x-request-id') || response?.headers?.get?.('x-dashscope-request-id') || ''), secret);
     const code = redactDetail(String(payload?.code || payload?.error?.code || ''), secret);
     return {...failedCall(request, label + (requestId ? `；请求编号：${requestId}` : ''), {quota}), httpStatus: status, code, requestId};
@@ -349,6 +353,17 @@ async function finishImage(response, request, secret = '', known, endpoint) {
   const url = imageUrlFrom(payload);
   if (!url) return failedCall(request, '返回里没有图片地址', {quota});
   return {simulation: false, called: true, pending_human: true, ok: true, url, label: '待核对', request};
+}
+
+function modelEndpointIssue(base, model) {
+  let parsed;
+  try { parsed = new URL(base); } catch { return ''; }
+  if (!dashscopeHost(parsed.hostname)) return '';
+  // Qwen chat/VL/embedding names cannot be used as text-to-image models.
+  if (/^qwen(?!-image(?:-|$))/i.test(model) || /^(?:text-embedding|multimodal-embedding|gte-|deepseek|qwq|qvq)/i.test(model)) {
+    return `IMAGE_MODEL「${model}」不是图像生成模型，请填写 qwen-image-3.0 或 qwen-image-3.0-pro 等生图模型`;
+  }
+  return '';
 }
 
 function imageKey(env) {
@@ -378,6 +393,7 @@ export function imageStatus(env = process.env) {
   }
   if (!model) issues.push('缺少 IMAGE_MODEL');
   else if (/\s|[,，/]/.test(model)) issues.push('IMAGE_MODEL 只能填写一个模型名称');
+  else { const issue = modelEndpointIssue(base, model); if (issue) issues.push(issue); }
   if (!keyConfigured) issues.push('生图密钥未配置或格式不正确');
   const ready = issues.length === 0;
   return {ready, enabled, baseConfigured: Boolean(base), model: model || null, keyConfigured,

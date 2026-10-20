@@ -67,3 +67,15 @@
 - 未确认商品就提交生图时，返回明确的未调用原因；配置缺失或关闭由已有配置检查和图片占位提示说明。
 - 新增 `tests/demand-clarification.mjs`，覆盖口语解析、多轮补充、模型未识别片段、配置关闭，以及通过本地模拟服务验证生图触发/不触发边界。浏览器验收补充原始错误输入的完整澄清流程。
 - 验证不调用真实付费服务，不能替代对使用者本机密钥权限与账户状态的验证。
+
+## 生图 HTTP 400：url error
+
+该错误说明请求已经发出。按阿里云错误码文档，模型与接口不匹配是可能原因；仅凭这句提示不能认定密钥或余额错误。当前应用直接使用 HTTP，不依赖 DashScope SDK。
+
+- 官方阿里云主机下，误填 `qwen3.7-plus`、`qwen-plus`、Qwen-VL 或嵌入模型等明显非生图模型时，调用前阻止并说明 `IMAGE_MODEL` 配置错误。
+- 服务端返回 `url error` 时，页面显示实际模型名、接口路径和配置检查方向，同时保留请求编号；不会自动切换模型或接口重试。
+- Qwen Image 3.0 的 `/compatible-mode/v1/images/generations` 是官方支持的路径，不应仅凭错误文案认定这条路径错误。可按控制台示例核对模型名，或显式配置官方 DashScope 同步完整地址（程序已支持对应请求体）。
+- 排查时提供 `npm run doctor` 的 `image.model`、`endpoint`、`protocol` 和本次请求编号即可，不需要提供 API 密钥。
+
+参考：https://help.aliyun.com/zh/model-studio/error-code#error-url
+参考：https://help.aliyun.com/zh/model-studio/qwen-image-generation-and-editing-api-reference

@@ -38,6 +38,24 @@ for (const executeImage of [nextImage,legacyImage]) {
     });
     assert.equal(count,1);assert.equal(image.ok,true);
   }
+  for (const model of ['qwen3.7-plus','qwen-plus','qwen3-vl-plus','text-embedding-v4']) {
+    let calls = 0;
+    const wrong = await executeImage({name:'测试商品'}, {...base,IMAGE_MODEL:model}, async()=>{ calls++;throw Error('must not call'); });
+    assert.equal(calls,0);
+    assert.equal(wrong.called,false);
+    assert.match(wrong.label,/不是图像生成模型/);
+  }
+  let mismatchCalls = 0;
+  const mismatch = await executeImage({name:'测试商品'},base,async()=>{
+    mismatchCalls++;
+    return {ok:false,status:400,headers:new Headers({'x-request-id':'url-fixture-001'}),text:async()=>JSON.stringify({code:'InvalidParameter',message:'url error, please check url！ For details, see: https://www.alibabacloud.com/help'})};
+  });
+  assert.equal(mismatchCalls,1,'never retry a rejected generation through a second model or endpoint');
+  assert.equal(mismatch.called,true);
+  assert.equal(mismatch.requestId,'url-fixture-001');
+  assert.match(mismatch.label,/模型与接口可能不匹配/);
+  assert.match(mismatch.label,/qwen-image-3\.0/);
+  assert.equal(JSON.stringify(mismatch).includes('fixture-only'),false);
   const rejected=await executeImage({name:'测试商品'},base,async()=>({ok:false,status:403,headers:new Headers({'x-request-id':'fixture-request-001'}),text:async()=>JSON.stringify({code:'AccessDenied',message:'fixture-only permission denied'})}));
   assert.equal(rejected.requestId,'fixture-request-001');
   assert.equal(rejected.code,'AccessDenied');
