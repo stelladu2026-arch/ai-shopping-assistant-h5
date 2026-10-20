@@ -32,9 +32,9 @@ async function acceptedLiveCopy(facts, sealed, refused) {
   } catch {
     return "";
   }
-  if (!live?.response) return "";
+  if (!live?.payload) return "";
   try {
-    const raw = await live.response.json();
+    const raw = live.payload;
     const payload = JSON.parse(raw?.choices?.[0]?.message?.content || "");
     const used = Array.isArray(payload.used_fact_ids) ? payload.used_fact_ids.map((item) => String(item)) : [];
     if (used.some((id) => id !== facts.id)) return "";
@@ -199,7 +199,7 @@ export async function runContentNode(session, request) {
       degraded: sealed.degraded,
       failure: imageNetwork ? "network" : null,
     };
-    if (imageNetwork) result.bodyText = `${result.bodyText}${FAILURE_TEXT.network}`;
+    if (imageNetwork) result.bodyText = `${result.bodyText}${imagePlaceholder}`;
     if (imageCapped) result.bodyText = `${result.bodyText}${capText("image")}`;
     const producedCopy = form.outputKind !== "image_only" && Boolean(String(bodyText || "").trim());
     if (!producedCopy && !imageUrl) releaseCall(session.id, "content");

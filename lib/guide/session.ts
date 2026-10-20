@@ -211,14 +211,14 @@ async function maybeLiveCopy(result) {
     factIds: [product.id],
     promotions: result.state.card.promotions,
   });
-  if (!live.response) {
+  if (!live.payload) {
     result.state.card = null;
     result.reply = "真实模型没有返回可用文案，已停止。没有用演示稿冒充模型结果。";
     return result;
   }
   let payload;
   try {
-    const raw = await live.response.json();
+    const raw = live.payload;
     payload = JSON.parse(raw.choices?.[0]?.message?.content || "");
   } catch {
     result.state.card = null;

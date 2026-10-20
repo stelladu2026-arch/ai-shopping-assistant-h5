@@ -1,10 +1,9 @@
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
 import {copyRequestBody, executeLiveCopy, modelStatus, QWEN_BASE_URL, QWEN_MODEL} from '../server/model-config.mjs';
 
-const research = readFileSync(new URL('../../jianwei-cursor-handoff-20261005/source/lib/research/provider-config.ts', import.meta.url), 'utf8');
-assert.ok(research.includes(QWEN_BASE_URL));
-assert.ok(research.includes("QWEN_MODEL='qwen3.7-plus'"));
+const next = await import('../lib/guide/model.ts');
+assert.equal(next.QWEN_BASE_URL, QWEN_BASE_URL);
+assert.equal(next.QWEN_MODEL, QWEN_MODEL);
 
 const idle = modelStatus({});
 assert.equal(idle.mode, 'simulation');
@@ -34,4 +33,4 @@ const bodySeen = await executeLiveCopy({maxChars: 80, factIds: ['S01'], product:
 });
 assert.equal(bodySeen.called, true);
 assert.equal(JSON.stringify(copyRequestBody({maxChars: 80, factIds: ['S01']})).includes(key), false);
-console.log('ok model config matches product research');
+console.log('ok model config matches Next.js and legacy entrypoints');

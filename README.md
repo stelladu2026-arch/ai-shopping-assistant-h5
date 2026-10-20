@@ -4,19 +4,34 @@
 
 ## 启动
 
-```bash
-node server/index.mjs
-```
-
-浏览器打开 http://127.0.0.1:4173 。这是手机宽度的单列 H5：首页、会话中心、对话页和设置。内容宽最多 430px。
-
-检查：
+当前 Next.js 移动端 H5 使用 项目要求的 Node.js 22：
 
 ```bash
-node tests/guide-rules.mjs
-node tests/model-config.mjs
-node tests/h5-layout.mjs
+npm ci
+npm run dev
 ```
+
+浏览器打开 http://localhost:3000 。检查稳定预览时可以先 `npm run build`，再 `npm start`，避免首次访问触发开发编译。
+
+`node server/index.mjs` / 4173 是旧版独立演示入口，与当前 Next.js 页面和 API 不同。
+
+加载故障与此次修复说明见 [docs/preview-loading-fix.md](docs/preview-loading-fix.md)。
+
+检查（不配置真实服务时不消耗模型额度）：
+
+```bash
+node --import ./tests/register-ts.mjs tests/request-deadlines.mjs
+node --import ./tests/register-ts.mjs tests/rag-retrieve.mjs
+node tests/edit-constraints.mjs
+node --import ./tests/register-ts.mjs tests/image-call.mjs
+npx tsc --noEmit --incremental false
+```
+
+## 生图配置检查
+
+在项目目录执行 `npm run doctor`。它不会调用模型或消耗额度，会显示配置实际来自哪个文件；特别检查 `.env.local` 是否覆盖了刚修改的 `.env`。修改后停止并重新启动服务。使用 `npm start` 时可用 `npm run doctor -- --production` 检查生产模式。
+
+`npm run test:stability` 运行非飞书主流程的 14 组离线回归。
 
 ## API Key 填写位置
 

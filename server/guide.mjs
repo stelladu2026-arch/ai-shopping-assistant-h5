@@ -1,3 +1,4 @@
+import { storeDate } from "./date.mjs";
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -229,7 +230,7 @@ function parseCopy(text) {
   return {asked, maxChars: chars ? Number(chars[1]) : null, tone, refused};
 }
 
-function activePromotions(productId, today = '2026-10-06') {
+function activePromotions(productId, today = storeDate()) {
   return promotions.filter(item =>
     item.products.includes(productId) &&
     item.store_id === 'demo' &&

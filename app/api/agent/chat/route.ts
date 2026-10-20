@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { guideAct, guideMaterial } from "@/lib/guide/session";
-import type { AgentChatResponseBody, MomentsGenerationInput } from "@/types/agent";
+import type { AgentChatResponseBody, GuideTurnBlock, MomentsGenerationInput } from "@/types/agent";
 
 export async function POST(req: Request) {
   const partial = (await req.json().catch(() => ({}))) as {
@@ -38,11 +38,14 @@ export async function POST(req: Request) {
   if (!result.ok) {
     return NextResponse.json(result, { status: 409 });
   }
+  if (!("structured" in result) || !("leadText" in result) || result.structured?.scene !== "guide_turn") {
+    return NextResponse.json({ ok: false, error: "invalid_guide_response", leadText: "请求未完成，请检查本地服务。" }, { status: 500 });
+  }
   const payload: AgentChatResponseBody = {
     messageId: `guide_${Date.now()}`,
     done: true,
     leadText: result.leadText || undefined,
-    structured: result.structured,
+    structured: result.structured as GuideTurnBlock,
   };
   return NextResponse.json(payload);
 }

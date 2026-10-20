@@ -1,10 +1,12 @@
 // @ts-nocheck
 // 与产品机会研究 source/lib/research/provider-config.ts 保持同一套公开连接信息。
 // 密钥不是本文件的一部分，只从环境变量读取。
+import { withDeadline } from "../request-deadline";
 import { normalizeInterpretation } from "./clauses";
 export const QWEN_MODEL = 'qwen3.7-plus';
 export const QWEN_BASE_URL = 'https://llm-feayjgruj6xxgtqa.cn-beijing.maas.aliyuncs.com/compatible-mode/v1';
 export const QWEN_TIMEOUT_MS = 45000;
+export const INTERPRET_TIMEOUT_MS = 12000;
 export const QWEN_MAX_OUTPUT_TOKENS = 2400;
 
 const RESEARCH_CONFIG = 'source/lib/research/provider-config.ts';
@@ -76,36 +78,35 @@ export function copyRequestBody(facts) {
   };
 }
 
-export async function executeLiveCopy(facts, env = process.env, fetcher = fetch) {
+export async function executeLiveCopy(facts, env = process.env, fetcher = fetch, timeoutMs = QWEN_TIMEOUT_MS) {
   const credentials = requireLiveCredentials(env);
   if (!credentials) {
     return {mode: 'simulation', called: false};
   }
   const body = copyRequestBody(facts);
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), QWEN_TIMEOUT_MS);
   try {
-    const response = await fetcher(credentials.status.endpoint, {
-      method: 'POST',
-      redirect: 'manual',
-      signal: controller.signal,
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: 'Bearer ' + credentials.key
-      },
-      body: JSON.stringify(body)
-    });
-    if (response.status >= 300 && response.status < 400) {
-      return {mode: 'live', called: true, error: 'PROVIDER_REDIRECT_REJECTED'};
-    }
-    if (!response.ok) {
-      return {mode: 'live', called: true, error: 'PROVIDER_HTTP_' + response.status};
-    }
-    return {mode: 'live', called: true, response};
+    return await withDeadline(async (signal) => {
+      const response = await fetcher(credentials.status.endpoint, {
+        method: 'POST',
+        redirect: 'manual',
+        signal,
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + credentials.key
+        },
+        body: JSON.stringify(body)
+      });
+      if (response.status >= 300 && response.status < 400) {
+        return {mode: 'live', called: true, error: 'PROVIDER_REDIRECT_REJECTED'};
+      }
+      if (!response.ok) {
+        return {mode: 'live', called: true, error: 'PROVIDER_HTTP_' + response.status};
+      }
+      const payload = await response.json();
+      return {mode: 'live', called: true, payload};
+    }, timeoutMs);
   } catch (error) {
-    return {mode: 'live', called: true, error: controller.signal.aborted ? 'MODEL_TIMEOUT' : 'PROVIDER_NETWORK_ERROR'};
-  } finally {
-    clearTimeout(timer);
+    return {mode: 'live', called: true, error: ['TimeoutError', 'AbortError'].includes(error?.name) ? 'MODEL_TIMEOUT' : 'PROVIDER_NETWORK_ERROR'};
   }
 }
 
@@ -152,53 +153,51 @@ export function interpretRequestBody(text) {
   };
 }
 
-export async function executeInterpret(text, env = process.env, fetcher = fetch) {
+export async function executeInterpret(text, env = process.env, fetcher = fetch, timeoutMs = INTERPRET_TIMEOUT_MS) {
   const credentials = requireLiveCredentials(env);
   if (!credentials) return {mode: 'simulation', called: false, interpretation: null};
   const body = interpretRequestBody(text);
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), QWEN_TIMEOUT_MS);
   try {
-    const response = await fetcher(credentials.status.endpoint, {
-      method: 'POST',
-      redirect: 'manual',
-      signal: controller.signal,
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: 'Bearer ' + credentials.key
-      },
-      body: JSON.stringify(body)
-    });
-    if (response.status >= 300 && response.status < 400) {
-      return {mode: 'live', called: true, error: 'PROVIDER_REDIRECT_REJECTED', interpretation: null};
-    }
-    if (!response.ok) {
-      return {mode: 'live', called: true, error: 'PROVIDER_HTTP_' + response.status, interpretation: null};
-    }
-    let payload = null;
-    try {
-      payload = await response.json();
-    } catch {
-      return {mode: 'live', called: true, error: 'PROVIDER_BAD_RESPONSE', interpretation: null};
-    }
-    const content = payload?.choices?.[0]?.message?.content;
-    if (typeof content !== 'string') {
-      return {mode: 'live', called: true, error: 'PROVIDER_BAD_RESPONSE', interpretation: null};
-    }
-    try {
-      return {mode: 'live', called: true, interpretation: normalizeInterpretation(JSON.parse(content))};
-    } catch {
-      return {mode: 'live', called: true, error: 'PROVIDER_BAD_RESPONSE', interpretation: null};
-    }
+    return await withDeadline(async (signal) => {
+      const response = await fetcher(credentials.status.endpoint, {
+        method: 'POST',
+        redirect: 'manual',
+        signal,
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + credentials.key
+        },
+        body: JSON.stringify(body)
+      });
+      if (response.status >= 300 && response.status < 400) {
+        return {mode: 'live', called: true, error: 'PROVIDER_REDIRECT_REJECTED', interpretation: null};
+      }
+      if (!response.ok) {
+        return {mode: 'live', called: true, error: 'PROVIDER_HTTP_' + response.status, interpretation: null};
+      }
+      let payload = null;
+      try {
+        payload = await response.json();
+      } catch {
+        return {mode: 'live', called: true, error: 'PROVIDER_BAD_RESPONSE', interpretation: null};
+      }
+      const content = payload?.choices?.[0]?.message?.content;
+      if (typeof content !== 'string') {
+        return {mode: 'live', called: true, error: 'PROVIDER_BAD_RESPONSE', interpretation: null};
+      }
+      try {
+        return {mode: 'live', called: true, interpretation: normalizeInterpretation(JSON.parse(content))};
+      } catch {
+        return {mode: 'live', called: true, error: 'PROVIDER_BAD_RESPONSE', interpretation: null};
+      }
+    }, timeoutMs);
   } catch (error) {
     return {
       mode: 'live',
       called: true,
-      error: controller.signal.aborted ? 'MODEL_TIMEOUT' : 'PROVIDER_NETWORK_ERROR',
+      error: ['TimeoutError', 'AbortError'].includes(error?.name) ? 'MODEL_TIMEOUT' : 'PROVIDER_NETWORK_ERROR',
       interpretation: null
     };
-  } finally {
-    clearTimeout(timer);
   }
 }
 

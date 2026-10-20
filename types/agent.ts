@@ -169,7 +169,11 @@ export interface GuideTurnBlock {
     failure?: { kind: string; text: string } | null;
     degraded?: string[];
   } | null;
-  memories: { customer: { id: string; key: string; value: string; verified: boolean }[] };
+  memories: {
+    guide: { id: string; key: string; value: string; verified: boolean }[];
+    task: { id: string; key: string; value: string; verified: boolean }[];
+    prior: { id: string; key: string; value: string; verified: boolean; fromSession: string }[];
+  };
   guideTone: string | null;
 }
 

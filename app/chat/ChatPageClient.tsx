@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchJsonResponse, requestErrorMessage } from "@/lib/request-deadline";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AssistantBubble } from "@/components/chat/AssistantBubble";
@@ -26,7 +27,6 @@ import { clearAllAppLocalStorage } from "@/lib/appLocalStorage";
 import { appendMomentsPiece, BLANK_COPY_STATUS, clearCopyReview, isGeneratedMomentsPiece, resetToBlankCopyCard } from "@/lib/chat/momentsPiece";
 import {
   agentChatRequest,
-  CHAT_FAIL_MSG,
   continueGenerateCtaLabel,
   defaultMomentsInput,
   id,
@@ -92,14 +92,18 @@ export function ChatPageClient() {
   const loadGuide = useCallback(async (sid: string) => {
     if (!sid) return;
     const seq = ++loadSeq.current;
-    const response = await fetch("/api/guide/act", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "status", sessionId: sid }),
-    });
-    const payload = await response.json();
-    if (seq !== loadSeq.current) return;
-    if (payload?.structured?.scene === "guide_turn") setGuideTurn(payload.structured);
+    try {
+      const { response, payload } = await fetchJsonResponse("/api/guide/act", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "status", sessionId: sid }),
+      }, 15000);
+      if (seq !== loadSeq.current) return;
+      if (!response.ok) throw new Error("status_failed");
+      if (payload?.structured?.scene === "guide_turn") setGuideTurn(payload.structured);
+    } catch (error) {
+      if (seq === loadSeq.current) setToastMsg(requestErrorMessage(error));
+    }
   }, []);
 
   useEffect(() => {
@@ -111,7 +115,7 @@ export function ChatPageClient() {
     if (!sessionId || sending) return;
     setSending(true);
     try {
-      const response = await fetch("/api/guide/act", {
+      const { response, payload } = await fetchJsonResponse("/api/guide/act", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -122,7 +126,6 @@ export function ChatPageClient() {
           revision: guideTurn?.revision,
         }),
       });
-      const payload = await response.json();
       if (!response.ok) {
         setToastMsg(payload.leadText || "没有确认成这件商品，请再点一次。");
         if (payload?.structured?.scene === "guide_turn") setGuideTurn(payload.structured);
@@ -130,6 +133,8 @@ export function ChatPageClient() {
       }
       if (payload?.structured?.scene === "guide_turn") setGuideTurn(payload.structured);
       setSceneMode("moments_marketing");
+    } catch (error) {
+      setToastMsg(requestErrorMessage(error));
     } finally {
       setSending(false);
       void loadGuide(sessionId);
@@ -238,7 +243,7 @@ export function ChatPageClient() {
           sellingPoints: [...momentsForm.sellingPoints],
         }),
       );
-      void fetch("/api/guide/act", {
+      void fetchJsonResponse("/api/guide/act", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -253,7 +258,7 @@ export function ChatPageClient() {
             momentsForm,
           },
         }),
-      });
+      }, 15000).catch(() => { /* Local transcript is already saved; no automatic retry. */ });
     }, 450);
     return () => window.clearTimeout(handle);
   }, [sessionHydrated, sessionId, messagesMoments, messagesRag, sceneMode, momentsForm]);
@@ -329,11 +334,11 @@ export function ChatPageClient() {
         leadText: payload.leadText,
         structured: payload.structured,
       }));
-    } catch {
+    } catch (error) {
       setMessagesMoments((current) => appendMomentsPiece(current, {
         id: id("a"),
         role: "assistant",
-        leadText: CHAT_FAIL_MSG,
+        leadText: requestErrorMessage(error),
       }));
     } finally {
       setSending(false);
@@ -408,13 +413,13 @@ export function ChatPageClient() {
           return [...prev.slice(0, index), userMsg, next, ...prev.slice(index + 1)];
         });
       }
-    } catch {
+    } catch (error) {
       setMessagesMoments((p) => [
         ...p,
         {
           id: id("a"),
           role: "assistant",
-          leadText: CHAT_FAIL_MSG,
+          leadText: requestErrorMessage(error),
         },
       ]);
     } finally {
@@ -449,6 +454,7 @@ export function ChatPageClient() {
         attachmentNote: file?.name,
         sessionId,
       });
+      if (payload?.structured?.scene === "guide_turn") setGuideTurn(payload.structured);
       setMessagesRag((p) => [
         ...p,
         {
@@ -459,13 +465,13 @@ export function ChatPageClient() {
         },
       ]);
       setRagHistory(appendRagQueryHistory(trimmed));
-    } catch {
+    } catch (error) {
       setMessagesRag((p) => [
         ...p,
         {
           id: id("a"),
           role: "assistant",
-          leadText: CHAT_FAIL_MSG,
+          leadText: requestErrorMessage(error),
         },
       ]);
     } finally {
@@ -546,11 +552,11 @@ export function ChatPageClient() {
           leadText: payload.leadText,
           structured: payload.structured,
         }));
-      } catch {
+      } catch (error) {
         setMessagesMoments((current) => appendMomentsPiece(current, {
           id: id("a"),
           role: "assistant",
-          leadText: CHAT_FAIL_MSG,
+          leadText: requestErrorMessage(error),
         }));
       } finally {
         setSending(false);
@@ -620,7 +626,7 @@ export function ChatPageClient() {
               },
             ];
           });
-        } catch {
+        } catch (error) {
           setMessagesMoments((p) => {
             const i = p.findIndex((m) => m.id === loadingId);
             if (i < 0) return p;
@@ -629,7 +635,7 @@ export function ChatPageClient() {
               {
                 id: id("a"),
                 role: "assistant",
-                leadText: CHAT_FAIL_MSG,
+                leadText: requestErrorMessage(error),
               },
             ];
           });
@@ -667,7 +673,7 @@ export function ChatPageClient() {
             },
           ];
         });
-      } catch {
+      } catch (error) {
         setMessagesRag((p) => {
           const i = p.findIndex((m) => m.id === loadingId);
           if (i < 0) return p;
@@ -676,7 +682,7 @@ export function ChatPageClient() {
             {
               id: id("a"),
               role: "assistant",
-              leadText: CHAT_FAIL_MSG,
+              leadText: requestErrorMessage(error),
             },
           ];
         });
@@ -711,17 +717,17 @@ export function ChatPageClient() {
     if (sending) return;
     setSending(true);
     try {
-      const response = await fetch("/api/guide/act", {
+      const { response, payload } = await fetchJsonResponse("/api/guide/act", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...body, sessionId }),
-      });
-      const payload = await response.json();
+      }, body.action === "image" || body.action === "rerun-content" ? 150000 : 60000);
       if (!response.ok) {
         setToastMsg(payload.leadText || (payload.error === "revision_conflict" ? "页面已更新，请再试一次。" : "没有完成，请再试一次。"));
         if (payload?.structured?.scene === "guide_turn") setGuideTurn(payload.structured);
         return;
       }
+      if (payload?.structured?.scene === "guide_turn") setGuideTurn(payload.structured);
       const action = String(body.action || "");
       const userText = action === "confirm"
         ? `确认了${payload.structured?.confirmedName || "这件商品"}`
@@ -747,6 +753,8 @@ export function ChatPageClient() {
         if (index < 0) return [...prev, ...user, next];
         return [...prev.slice(0, index), ...user, next, ...prev.slice(index + 1)];
       });
+    } catch (error) {
+      setToastMsg(requestErrorMessage(error));
     } finally {
       setSending(false);
       if (sessionId) void loadGuide(sessionId);
@@ -769,14 +777,15 @@ export function ChatPageClient() {
       messages: afterUser.map(toAgentPayload),
       sessionId,
     }).then((payload) => {
+      if (payload?.structured?.scene === "guide_turn") setGuideTurn(payload.structured);
       setMessagesRag((prev) => [...prev, {
         id: payload.messageId || id("a"),
         role: "assistant",
         leadText: payload.leadText,
         structured: payload.structured,
       }]);
-    }).catch(() => {
-      setMessagesRag((prev) => [...prev, { id: id("a"), role: "assistant", leadText: CHAT_FAIL_MSG }]);
+    }).catch((error) => {
+      setMessagesRag((prev) => [...prev, { id: id("a"), role: "assistant", leadText: requestErrorMessage(error) }]);
     }).finally(() => setSending(false));
   }, [sessionHydrated, searchParams, sessionId]);
 

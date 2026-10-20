@@ -1,5 +1,5 @@
 function imageEnabled(env) {
-  const flag = String(env?.GUIDE_IMAGE_ENABLED ?? '').trim().toLowerCase();
+  const flag = cleanEnv(env?.GUIDE_IMAGE_ENABLED).toLowerCase();
   return flag !== 'false' && flag !== '0' && flag !== 'off';
 }
 
@@ -19,11 +19,19 @@ function dashscopeImageModel(model) {
   return /qwen|dashscope/i.test(String(model || ''));
 }
 
+function modernQwen(model) {
+  return /^qwen-image-(3\.0|2\.1)(?:-|$)/i.test(String(model || ''));
+}
+
 function imageSize(model, kind) {
-  if (kind === 'multimodal') return '2048*2048';
-  if (kind === 'compatible') return '1024x1024';
-  if (dashscopeImageModel(model)) return '1328*1328';
-  return '1024x1024'.replace(/x/gi, '*');
+  if (kind === 'compatible' || kind === 'openai') return '1024x1024';
+  if (modernQwen(model)) return '1024*1024';
+  if (/^qwen-image(?:-plus|-max)?(?:-|$)/i.test(String(model || ''))) return '1328*1328';
+  return '1024*1024';
+}
+
+function fastOptions(model) {
+  return modernQwen(model) ? { enable_thinking: false, watermark: false } : {};
 }
 
 function stripImageRefs(text) {
@@ -89,6 +97,13 @@ function imageEndpoint(base, model) {
   let parsed = null;
   try { parsed = new URL(trimmed); } catch { parsed = null; }
   const path = parsed ? parsed.pathname.replace(/\/+$/, '') : '';
+  // Respect explicitly supplied native endpoints, including the 3.0 async protocol.
+  if (parsed && /\/api\/v1\/services\/aigc\/image-generation\/generation$/i.test(path)) {
+    return {url: parsed.origin + path, native: true, kind: 'multimodal-async'};
+  }
+  if (parsed && /\/api\/v1\/services\/aigc\/multimodal-generation\/generation$/i.test(path)) {
+    return {url: parsed.origin + path, native: false, kind: 'multimodal'};
+  }
   if (parsed && sharedDashscopeImageHost(parsed.hostname)) {
     if ((path === '/api/v1' || path.startsWith('/api/v1/')) && !qwenImageModel(model)) return asyncEndpoint(parsed);
     return multimodalEndpoint(parsed);
@@ -122,11 +137,11 @@ function imageEndpoint(base, model) {
 function imageBody(product, model, kind) {
   const prompt = furniturePrompt(product);
   const size = imageSize(model, kind);
-  if (kind === 'multimodal') {
-    return {model, input: {messages: [{role: 'user', content: [{text: prompt}]}]}, parameters: {size, n: 1, watermark: false}};
+  if (kind === 'multimodal' || kind === 'multimodal-async') {
+    return {model, input: {messages: [{role: 'user', content: [{text: prompt}]}]}, parameters: {size, n: 1, watermark: false, ...fastOptions(model)}};
   }
   if (kind === 'async') return {model, input: {prompt}, parameters: {size, n: 1}};
-  if (kind === 'compatible') return {model, prompt, size, n: 1, prompt_extend: true};
+  if (kind === 'compatible') return {model, prompt, size, n: 1, prompt_extend: true, ...fastOptions(model)};
   return {model, prompt, size, n: 1};
 }
 
@@ -135,17 +150,17 @@ function outgoingBody(request) {
   const source = request?.body || {};
   const nested = source.input?.messages?.[0]?.content?.[0]?.text;
   const prompt = stripImageRefs(source.prompt || source.input?.prompt || nested || '');
-  if (kind === 'multimodal') {
+  if (kind === 'multimodal' || kind === 'multimodal-async') {
     return {
       model: source.model,
       input: {messages: [{role: 'user', content: [{text: prompt}]}]},
-      parameters: {size: source.parameters?.size, n: 1, watermark: false},
+      parameters: {size: source.parameters?.size, n: 1, watermark: false, ...fastOptions(source.model)},
     };
   }
   if (kind === 'async') {
     return {model: source.model, input: {prompt}, parameters: {size: source.parameters?.size, n: 1}};
   }
-  if (kind === 'compatible') return {model: source.model, prompt, size: '1024x1024', n: 1, prompt_extend: true};
+  if (kind === 'compatible') return {model: source.model, prompt, size: '1024x1024', n: 1, prompt_extend: true, ...fastOptions(source.model)};
   return {model: source.model, prompt, size: source.size, n: 1};
 }
 
@@ -234,8 +249,8 @@ function isTransportError(error) {
   return /network|fetch failed|ECONN|ENOTFOUND|ETIMEDOUT|timeout|socket|aborted/i.test(message);
 }
 
-function skipped(request) {
-  return {simulation: true, called: false, pending_human: true, url: '', label: '没有调用生图接口', request};
+function skipped(request, status) {
+  return {simulation: true, called: false, pending_human: true, url: '', label: '没有调用生图接口：' + status.issues.join('；'), request};
 }
 
 function failedCall(request, label, extra = {}) {
@@ -327,21 +342,47 @@ async function finishImage(response, request, secret = '', known, endpoint) {
   const quota = isQuotaFailure(status, payload, '');
   if (!response?.ok) {
     const label = status > 0 ? httpFailureLabel(status, payload, secret, endpoint || request?.url) : '返回里没有图片地址';
-    return failedCall(request, label, {quota});
+    const requestId = redactDetail(String(payload?.request_id || response?.headers?.get?.('x-request-id') || response?.headers?.get?.('x-dashscope-request-id') || ''), secret);
+    const code = redactDetail(String(payload?.code || payload?.error?.code || ''), secret);
+    return {...failedCall(request, label + (requestId ? `；请求编号：${requestId}` : ''), {quota}), httpStatus: status, code, requestId};
   }
   const url = imageUrlFrom(payload);
   if (!url) return failedCall(request, '返回里没有图片地址', {quota});
   return {simulation: false, called: true, pending_human: true, ok: true, url, label: '待核对', request};
 }
 
+function imageKey(env) {
+  const own = cleanEnv(env.IMAGE_API_KEY);
+  if (own) return own;
+  try {
+    const parsed = new URL(cleanEnv(env.IMAGE_API_BASE));
+    if (parsed.protocol === 'https:' && dashscopeHost(parsed.hostname)) return cleanEnv(env.DASHSCOPE_API_KEY);
+  } catch { /* Invalid address is reported by imageStatus. */ }
+  return '';
+}
+
 export function imageStatus(env = process.env) {
   const base = cleanEnv(env.IMAGE_API_BASE);
   const model = cleanEnv(env.IMAGE_MODEL);
-  const key = cleanEnv(env.IMAGE_API_KEY);
-  const keyConfigured = key.length > 0 && !/\s/.test(key);
+  const key = imageKey(env);
+  const keyConfigured = key.length > 0 && !/\s|[“”‘’]/.test(key);
   const enabled = imageEnabled(env);
-  const ready = Boolean(enabled && base && model && keyConfigured);
-  return {ready, enabled, baseConfigured: Boolean(base), model: model || null, keyConfigured};
+  const issues = [];
+  if (!enabled) issues.push('生图开关已关闭，请检查 GUIDE_IMAGE_ENABLED 和配置文件覆盖');
+  if (!base) issues.push('缺少 IMAGE_API_BASE');
+  else {
+    try {
+      const parsed = new URL(base);
+      if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password || /[{}<>]/.test(base)) throw new Error('invalid');
+    } catch { issues.push('IMAGE_API_BASE 不是有效接口地址，请填写控制台的完整地址'); }
+  }
+  if (!model) issues.push('缺少 IMAGE_MODEL');
+  else if (/\s|[,，/]/.test(model)) issues.push('IMAGE_MODEL 只能填写一个模型名称');
+  if (!keyConfigured) issues.push('生图密钥未配置或格式不正确');
+  const ready = issues.length === 0;
+  return {ready, enabled, baseConfigured: Boolean(base), model: model || null, keyConfigured,
+    keySource: cleanEnv(env.IMAGE_API_KEY) ? 'IMAGE_API_KEY' : key ? 'DASHSCOPE_API_KEY' : null,
+    issues};
 }
 
 function taskFailure(response, payload, request, secret, endpoint) {
@@ -374,7 +415,7 @@ async function pollNative(endpoint, request, secret, fetcher) {
       return taskFailure(response, payload, request, secret, endpoint);
     }
   }
-  return failedCall(request, '返回里没有图片地址');
+  return failedCall(request, '生成仍在处理中，结果未知。未重新提交，请先核对结果和用量。', {network: true});
 }
 
 async function readNative(response, request, secret, fetcher) {
@@ -392,7 +433,7 @@ async function readNative(response, request, secret, fetcher) {
 }
 
 async function requestImage(request, env, fetcher) {
-  const key = cleanEnv(env.IMAGE_API_KEY);
+  const key = imageKey(env);
   const headers = {'Content-Type': 'application/json', Authorization: 'Bearer ' + key};
   if (request.native) headers['X-DashScope-Async'] = 'enable';
   request.body = outgoingBody(request);
@@ -423,15 +464,27 @@ export function imageRequest(product, env = process.env) {
 export async function executeImage(product, env = process.env, fetcher = fetch) {
   const status = imageStatus(env);
   const request = imageRequest(product, env);
-  if (!status.ready) return skipped(request);
+  if (!status.ready) return skipped(request, status);
   try {
-    return await requestImage(request, env, fetcher);
+    const controller = new AbortController();
+    let timer;
+    try {
+      return await Promise.race([
+        requestImage(request, env, (url, init) => {
+          controller.signal.throwIfAborted();
+          return fetcher(url, { ...init, signal: controller.signal });
+        }),
+        new Promise((_, reject) => {
+          timer = setTimeout(() => { const error = new Error('Image timeout'); error.name = 'TimeoutError'; reject(error); controller.abort(error); }, 90000);
+        }),
+      ]);
+    } finally { clearTimeout(timer); }
   } catch (error) {
     const message = String(error?.message || error || '');
     if (isQuotaFailure(0, null, message) && !isTransportError(error)) {
       return failedCall(request, '返回里没有图片地址', {quota: true});
     }
-    if (isTransportError(error)) return failedCall(request, '网络错误', {network: true});
+    if (isTransportError(error)) return failedCall(request, '网络异常或等待超时，生成结果未知。未自动重试，请先核对结果和用量。', {network: true});
     return failedCall(request, '返回里没有图片地址');
   }
 }

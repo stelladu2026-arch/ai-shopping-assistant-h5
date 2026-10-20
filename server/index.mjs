@@ -1,3 +1,4 @@
+import {loadProjectEnv} from "./env.mjs";
 import {createServer} from 'node:http';
 import {readFile} from 'node:fs/promises';
 import {existsSync, readFileSync} from 'node:fs';
@@ -16,20 +17,7 @@ function loadMemory() {
 }
 
 function loadEnvFile() {
-  const file = path.join(root, '.env');
-  if (!existsSync(file)) return;
-  for (const line of readFileSync(file, 'utf8').split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
-    const matched = trimmed.match(/^(?:export\s+)?([A-Z0-9_]+)\s*=\s*(.*)$/);
-    if (!matched || process.env[matched[1]] != null) continue;
-    let value = matched[2].trim();
-    if (value.length >= 2) {
-      const quote = value[0];
-      if ((quote === '"' || quote === "'") && value[value.length - 1] === quote) value = value.slice(1, -1);
-    }
-    process.env[matched[1]] = value;
-  }
+  loadProjectEnv(root);
 }
 
 function send(response, status, body, type = 'application/json; charset=utf-8') {
@@ -185,7 +173,7 @@ async function maybeLiveCopy(result) {
     factIds: [product.id],
     promotions: result.state.card.promotions
   });
-  if (!live.response) {
+  if (!live.payload) {
     result.state.card = null;
     result.status = 'live_error';
     result.reply = '真实模型没有返回可用文案，已停止。没有用演示稿冒充模型结果。';
@@ -193,7 +181,7 @@ async function maybeLiveCopy(result) {
   }
   let payload;
   try {
-    const raw = await live.response.json();
+    const raw = live.payload;
     payload = JSON.parse(raw.choices?.[0]?.message?.content || '');
   } catch {
     result.state.card = null;

@@ -1,7 +1,8 @@
 // @ts-nocheck
+import { storeDate } from "../../server/date.mjs";
 import promotions from "../../data/promotions.json";
 
-const TODAY = "2026-10-06";
+
 
 function stacks(left, right) {
   return Boolean(left.stack_with?.includes(right.id) && right.stack_with?.includes(left.id));
@@ -29,10 +30,10 @@ function compatible(group) {
   return true;
 }
 
-export function buildPromoPlan(productId) {
+export function buildPromoPlan(productId, today = storeDate()) {
   const related = promotions.filter((item) => item.products.includes(productId) && item.store_id === "demo");
-  const active = related.filter((item) => item.start <= TODAY && item.end >= TODAY);
-  const expired = related.filter((item) => item.start > TODAY || item.end < TODAY);
+  const active = related.filter((item) => item.start <= today && item.end >= today);
+  const expired = related.filter((item) => item.start > today || item.end < today);
   const choices = subsets(active).filter(compatible);
   choices.sort((left, right) => {
     const discount = (group) => group.reduce((sum, item) => sum + item.discount_cny, 0);

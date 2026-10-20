@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { RAG_TIMEOUT_MS } from "./rag";
 import promotions from "../../data/promotions.json";
 import { confirmFromCatalog, confirmProduct, productById, resolveConstraintSearch } from "./engine";
 import { degradeStoreReason, formatStoreHit, MISS_TEXT, retrieve, storeExcerptConflicts } from "./knowledge";
@@ -19,10 +20,10 @@ export async function lookupStoreDoc(query) {
   };
 }
 
-async function readStore(sessionId, query) {
+async function readStore(sessionId, query, deadlineAt) {
   const gate = consumeCall(sessionId, "retrieve", LIMITS.retrieve);
   if (!gate.ok) return { capped: true, hit: null };
-  const hit = await retrieve(query);
+  const hit = await retrieve(query, undefined, { deadlineAt });
   latestRetrieveTrace = retrieve.lastTrace || null;
   return { capped: false, hit };
 }
@@ -75,10 +76,10 @@ export function applyStoreExcerpt(product, hit) {
   };
 }
 
-async function factsFor(sessionId, productId, plan) {
+async function factsFor(sessionId, productId, plan, deadlineAt) {
   const product = productById(productId);
   if (!product) return null;
-  const read = await readStore(sessionId, product.name);
+  const read = await readStore(sessionId, product.name, deadlineAt);
   const explained = explainStore(read, product);
   const promoPlan = plan || buildPromoPlan(product.id);
   return {
@@ -121,6 +122,8 @@ function markPending(session, reviewNote) {
 
 export async function runProductDecision(session, request) {
   latestRetrieveTrace = null;
+  // All candidates share one retrieval deadline; slow services cannot multiply the wait.
+  const deadlineAt = Date.now() + RAG_TIMEOUT_MS;
   // 点选已经列出的商品不是一次新的筛选。次数用完之后，仍可以确认当前列表里的一件。
   if (request?.intent !== "confirm") {
     const gate = consumeCall(session.id, "product_decision", LIMITS.product_decision);
@@ -137,7 +140,7 @@ export async function runProductDecision(session, request) {
       : confirmProduct(session.record.state, request.productId, request.revision);
     if (!settled.ok) return { ok: false, error: settled.error || "confirm_failed" };
       session.record.state = settled.state;
-      const facts = await factsFor(session.id, settled.state.confirmed_product_id, previous?.output?.plans?.[settled.state.confirmed_product_id]);
+      const facts = await factsFor(session.id, settled.state.confirmed_product_id, previous?.output?.plans?.[settled.state.confirmed_product_id], deadlineAt);
       if (session.record.state.card && facts?.promoPlan) {
         session.record.state.card.promotions = chosenPromotions(facts.promoPlan);
       }
@@ -186,7 +189,7 @@ export async function runProductDecision(session, request) {
     const found = [];
     for (const id of probed.officialIds) {
       const product = productById(id);
-      const read = product ? await readStore(session.id, product.name) : { capped: false, hit: null };
+      const read = product ? await readStore(session.id, product.name, deadlineAt) : { capped: false, hit: null };
       const explained = explainStore(read, product);
       found.push({
         id,
@@ -205,7 +208,7 @@ export async function runProductDecision(session, request) {
     session.record.state.candidate_ids = candidateIds;
     let confirmedFacts = previous?.output?.confirmedFacts || null;
     if (confirmedId && candidateIds.includes(confirmedId)) {
-      confirmedFacts = await factsFor(session.id, confirmedId, plans[confirmedId]);
+      confirmedFacts = await factsFor(session.id, confirmedId, plans[confirmedId], deadlineAt);
       if (!plans[confirmedId]) plans[confirmedId] = confirmedFacts.promoPlan;
     }
     const output = { products: found, plans, candidateIds, confirmedFacts, retrieveTrace: latestRetrieveTrace };

@@ -99,7 +99,8 @@ export async function executeLiveCopy(facts, env = process.env, fetcher = fetch)
     if (!response.ok) {
       return {mode: 'live', called: true, error: 'PROVIDER_HTTP_' + response.status};
     }
-    return {mode: 'live', called: true, response};
+    const payload = await response.json();
+    return {mode: 'live', called: true, payload};
   } catch (error) {
     return {mode: 'live', called: true, error: controller.signal.aborted ? 'MODEL_TIMEOUT' : 'PROVIDER_NETWORK_ERROR'};
   } finally {

@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import catalog from "../../data/catalog.json";
 import { DEGRADE_TEXT } from "./limits";
-import { DEMO_METHOD, REMOTE_METHOD, rankByDemo, rankByRemote, remoteReady } from "./rag";
+import { DEMO_METHOD, REMOTE_METHOD, RAG_TIMEOUT_MS, rankByDemo, rankByRemote, remoteReady } from "./rag";
 
 const dir = path.join(process.cwd(), "data", "knowledge");
 const COLORS = [...new Set(catalog.map((item) => item.color))].sort((a, b) => b.length - a.length);
@@ -205,15 +205,19 @@ export async function searchStore(query, knowledgeDir = dir, options = {}) {
   if (!needle) return pack("demo_rerank", DEMO_METHOD, "", []);
   const env = options.env || process.env;
   const chunks = loadKnowledgeChunks(folder).filter((chunk) => acceptsChunk(needle, chunk));
-  if (remoteReady(env)) {
+  let fallbackNote = "";
+  const remaining = options.deadlineAt == null ? RAG_TIMEOUT_MS : options.deadlineAt - Date.now();
+  if (remoteReady(env) && remaining > 0) {
     try {
-      const ranked = chunks.length ? await rankByRemote(needle, chunks, env, options.fetcher || fetch) : [];
+      const ranked = chunks.length ? await rankByRemote(needle, chunks, env, options.fetcher || fetch, Math.min(RAG_TIMEOUT_MS, remaining)) : [];
       return pack("embed_rerank", REMOTE_METHOD, "", ranked);
     } catch {
+      fallbackNote = "远程检索未完成，本次使用本地资料匹配。";
       // 远程没有完成时不再发请求，改用进程内演示检索。
     }
   }
-  return pack("demo_rerank", DEMO_METHOD, "", rankByDemo(needle, chunks));
+  if (remoteReady(env) && remaining <= 0) fallbackNote = "远程检索等待已达上限，本次使用本地资料匹配。";
+  return pack("demo_rerank", DEMO_METHOD, fallbackNote, rankByDemo(needle, chunks));
 }
 
 export async function retrieve(query, knowledgeDir = dir, options = {}) {

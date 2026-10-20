@@ -3,6 +3,9 @@
 // 远程只在嵌入地址、嵌入密钥都非空，且 GUIDE_RAG_REMOTE_CONFIRMED=true 时才发请求。
 // 重排序密钥留空时改用嵌入密钥。重排序地址由嵌入主机派生，不走 /rerank。
 // 模型名只放进请求体。不下载权重，不使用本机 Python 或 ONNX。
+import { withDeadline } from "../request-deadline";
+export const RAG_TIMEOUT_MS = 12000;
+
 export const EMBED_MODEL = "qwen3.7-text-embedding";
 export const RERANK_MODEL = "qwen3.7-text-rerank";
 export const EMBED_BATCH = 20;
@@ -103,9 +106,11 @@ export function cosine(left, right) {
 }
 
 async function requestEmbeddingBatch(texts, config, fetcher) {
+  config.signal?.throwIfAborted();
   const response = await fetcher(embeddingsUrl(config), {
     method: "POST",
     redirect: "manual",
+    signal: config.signal,
     headers: {
       "content-type": "application/json",
       authorization: `Bearer ${config.embedKey}`,
@@ -146,7 +151,7 @@ export async function postEmbed(texts, env = process.env, fetcher = fetch) {
     error.status = 0;
     throw error;
   }
-  return requestEmbeddings(list, config, fetcher);
+  return withDeadline((signal) => requestEmbeddings(list, { ...config, signal }, fetcher), RAG_TIMEOUT_MS);
 }
 
 async function embeddingsFor(texts, config, fetcher) {
@@ -164,9 +169,11 @@ async function embeddingsFor(texts, config, fetcher) {
 }
 
 async function requestRerank(query, documents, config, fetcher) {
+  config.signal?.throwIfAborted();
   const response = await fetcher(rerankUrl(config), {
     method: "POST",
     redirect: "manual",
+    signal: config.signal,
     headers: {
       "content-type": "application/json",
       authorization: `Bearer ${config.rerankKey}`,
@@ -199,7 +206,7 @@ export async function postRerank(query, documents, env = process.env, fetcher = 
     error.status = 0;
     throw error;
   }
-  return requestRerank(String(query), docs, config, fetcher);
+  return withDeadline((signal) => requestRerank(String(query), docs, { ...config, signal }, fetcher), RAG_TIMEOUT_MS);
 }
 
 function skipChar(ch) {
@@ -281,10 +288,15 @@ export function rankByDemo(query, chunks) {
     .map((item) => item.chunk);
 }
 
-export async function rankByRemote(query, chunks, env = process.env, fetcher = fetch) {
+export async function rankByRemote(query, chunks, env = process.env, fetcher = fetch, timeoutMs = RAG_TIMEOUT_MS) {
+  return withDeadline((signal) => rankRemote(query, chunks, env, fetcher, signal), timeoutMs);
+}
+
+async function rankRemote(query, chunks, env, fetcher, signal) {
   const list = Array.isArray(chunks) ? chunks : [];
   const config = ragConfig(env);
   if (!config.ready || !String(query || "").trim() || !list.length) return [];
+  config.signal = signal;
   const passages = list.map((chunk) => `${chunk?.title || ""}\n${chunk?.section || ""}\n${chunk?.text || ""}`);
   const vectors = await embeddingsFor([query, ...passages], config, fetcher);
   const recalled = list

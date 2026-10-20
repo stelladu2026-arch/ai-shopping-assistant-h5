@@ -21,7 +21,7 @@ const skipped = await executeImage(product, { ...imageEnv, GUIDE_IMAGE_ENABLED: 
 assert.equal(skippedCalls, 0);
 assert.equal(skipped.called, false);
 assert.equal(skipped.simulation, true);
-assert.equal(skipped.label, "没有调用生图接口");
+assert.match(skipped.label, /生图开关已关闭/);
 
 let quotaCalls = 0;
 const quota = await executeImage(product, imageEnv, async (url) => {
@@ -81,7 +81,7 @@ try {
   assert.match(disabled.moments.bodyText, /2699/);
   assert.equal(disabled.moments.bodyText.includes("演示回放、待核对"), false);
   assert.equal(disabled.moments.generatedImageUrl, "");
-  assert.equal(disabled.moments.imagePlaceholder, "没有调用生图接口");
+  assert.match(disabled.moments.imagePlaceholder, /生图开关已关闭/);
   assert.equal(disabled.structured.confirmedId, "S01");
 
   process.env.GUIDE_IMAGE_ENABLED = "true";
