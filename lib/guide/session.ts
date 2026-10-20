@@ -268,6 +268,8 @@ export async function guideMaterial(input, sessionId, options = {}) {
       hashtags: [],
       imageSuggestion: "",
       generatedImageUrl: "",
+      generatedImageUrls: [],
+      image_urls_text: "",
       imagePlaceholder: ran.reply || "",
       commentThreadScript: "",
       graph: graphView(ran),
@@ -286,6 +288,8 @@ export async function guideMaterial(input, sessionId, options = {}) {
       hashtags: [],
       imageSuggestion: "",
       generatedImageUrl: "",
+      generatedImageUrls: [],
+      image_urls_text: "",
       commentThreadScript: "",
       graph: graphView(ran),
     };

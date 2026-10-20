@@ -517,6 +517,7 @@ export function ChatPageClient() {
       const snap = {
         ...ed?.momentsSnapshot,
         outputKind: ed?.momentsSnapshot?.outputKind || momentsForm.outputKind,
+        imageCount: ed?.momentsSnapshot?.imageCount ?? momentsForm.imageCount ?? 4,
         productName: guideTurn.confirmedFacts.name,
         sellingPoints: [...(ed?.momentsSnapshot?.sellingPoints ?? momentsForm.sellingPoints)],
         copyStyle: ed?.momentsSnapshot?.copyStyle || momentsForm.copyStyle,

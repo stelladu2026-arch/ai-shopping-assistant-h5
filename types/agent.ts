@@ -17,6 +17,7 @@ export type MomentsAudienceId = "first_home" | "upgrade" | "luxury";
 export interface MomentsGenerationInput {
   /** 与首页一致：仅文案 / 仅配图 / 图文 */
   outputKind: MomentsOutputKind;
+  imageCount?: 1 | 4;
   productName: string;
   sellingPoints: string[];
   copyStyle: MomentsCopyStyleId;
@@ -39,6 +40,10 @@ export interface MomentsGenerationResult {
   pieceId?: string;
   /** 图片地址，或 data:image 形式的返回图 */
   generatedImageUrl?: string;
+  generatedImageUrls?: string[];
+  image_urls_text?: string;
+  images?: { url: string; name: string; description: string }[];
+  requestedImageCount?: number;
   commentThreadScript?: string;
 }
 
@@ -220,7 +225,8 @@ export function stringifyStructuredBlock(s: AgentStructuredBlock): string {
     if (s.hashtags.length)
       lines.push(`话题：${s.hashtags.map((h) => (h.startsWith("#") ? h : `#${h}`)).join(" ")}`);
     if (s.imageSuggestion?.trim()) lines.push(`配图建议：${s.imageSuggestion}`);
-    if (s.generatedImageUrl && !s.generatedImageUrl.startsWith("data:")) lines.push(`配图地址：${s.generatedImageUrl}`);
+    const urls = s.generatedImageUrls?.length ? s.generatedImageUrls : s.generatedImageUrl ? [s.generatedImageUrl] : [];
+    if (urls.some(url => !url.startsWith("data:"))) lines.push(`配图地址：${urls.filter(url => !url.startsWith("data:")).join(' ')}`);
     else if (!s.generatedImageUrl && s.imagePlaceholder?.trim()) lines.push(`配图：${s.imagePlaceholder}`);
     if (s.commentThreadScript?.trim()) lines.push(`评论区话术：${s.commentThreadScript}`);
     return lines.join("\n");

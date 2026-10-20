@@ -18,6 +18,7 @@ const imageEnv = {
 const imageUrl = "https://img.example.test/new-piece.png";
 const momentsInput = {
   outputKind: "rich",
+  imageCount: 1,
   productName: "别的名字",
   sellingPoints: ["现货速发"],
   copyStyle: "warm",
@@ -165,7 +166,7 @@ try {
     message: "url error, please check url！ For details, see: https://www.alibabacloud.com/help",
   });
   const added = await guideMaterial(momentsInput, keepId, { newPiece: true });
-  assert.match(added.imagePlaceholder, /url error/);
+  assert.match(added.imagePlaceholder, /模型与接口可能不匹配/);
   assert.equal(added.cardTitle.includes("已达本次上限"), false);
   assert.equal(String(added.bodyText || "").includes("这次接待最多"), false);
   assert.equal(String(added.imagePlaceholder || "").includes("这次接待最多"), false);
@@ -173,7 +174,7 @@ try {
   assert.equal(record.materials.length, 2);
   assert.equal(record.materials[0].generatedImageUrl, "https://img.example.test/first-piece.png");
   assert.equal(record.materials[0].imagePlaceholder || "", "");
-  assert.match(record.materials[1].imagePlaceholder, /url error/);
+  assert.match(record.materials[1].imagePlaceholder, /模型与接口可能不匹配/);
   assert.notEqual(record.materials[0].pieceId, record.materials[1].pieceId);
   const shown = appendMomentsPiece([{
     id: "card-1",
@@ -187,7 +188,7 @@ try {
   assert.equal(shown.length, 2);
   assert.equal(shown[0].structured.generatedImageUrl, "https://img.example.test/first-piece.png");
   assert.equal(shown[0].structured.imagePlaceholder || "", "");
-  assert.match(shown[1].structured.imagePlaceholder, /url error/);
+  assert.match(shown[1].structured.imagePlaceholder, /模型与接口可能不匹配/);
   assert.notEqual(shown[1].id, shown[0].id);
 
   console.log("visible-first", JSON.stringify({

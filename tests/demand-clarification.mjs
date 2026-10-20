@@ -78,7 +78,7 @@ try {
   let result = await guideAct({action:'turn',sessionId,text:'预算3千多桌子'});
   assert.match(result.leadText,/餐桌、书桌还是茶几/);
   assert.equal(images,0);
-  const blocked = await guideMaterial({outputKind:'image_only'},sessionId,{newPiece:true});
+  const blocked = await guideMaterial({imageCount:1,outputKind:'image_only'},sessionId,{newPiece:true});
   assert.equal(blocked.generatedImageUrl,'');
   assert.equal(images,0);
   await guideAct({action:'turn',sessionId,text:'餐桌'});
@@ -88,16 +88,16 @@ try {
   const selected = result.structured.products[0];
   assert.ok(selected, 'clarification must resume recommendation');
   await guideAct({action:'confirm',sessionId,productId:selected.id});
-  await guideMaterial({outputKind:'copy_only'},sessionId,{newPiece:true});
+  await guideMaterial({imageCount:1,outputKind:'copy_only'},sessionId,{newPiece:true});
   assert.equal(images,0, 'copy-only must not spend image quota');
-  const generated = await guideMaterial({outputKind:'image_only'},sessionId,{newPiece:true});
+  const generated = await guideMaterial({imageCount:1,outputKind:'image_only'},sessionId,{newPiece:true});
   assert.equal(generated.generatedImageUrl,'https://image.fixture.invalid/table.png');
   assert.equal(images,1);
-  const rich = await guideMaterial({outputKind:'rich'},sessionId,{newPiece:true});
+  const rich = await guideMaterial({imageCount:1,outputKind:'rich'},sessionId,{newPiece:true});
   assert.equal(rich.generatedImageUrl,'https://image.fixture.invalid/table.png');
   assert.equal(images,2);
   process.env.GUIDE_IMAGE_ENABLED = 'false';
-  const disabled = await guideMaterial({outputKind:'image_only'},sessionId,{newPiece:true});
+  const disabled = await guideMaterial({imageCount:1,outputKind:'image_only'},sessionId,{newPiece:true});
   assert.match(disabled.imagePlaceholder,/开关已关闭/);
   assert.equal(images,2,'disabled provider must not be contacted');
 } finally { globalThis.fetch = originalFetch; }

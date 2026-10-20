@@ -92,3 +92,24 @@
 验证：双入口的接口合同模拟（4种地址）、任务查询、最大1张图限制；`PREVIEW_IMAGE_MODEL=wan2.6-image` 可运行同一移动浏览器验收。所有验证连接本地模拟服务，不消耗厂商额度。
 
 官方接口参考：https://help.aliyun.com/zh/model-studio/wan-image-generation-api-reference
+
+## 当前四图方案与运行版本确认
+
+当前运行标识为 `guide-wan26-four-images-20261020`。在浏览器打开 `http://localhost:3000/api/diagnostics` 可核对**正在运行**的版本、模型、最终接口与协议；它不会调用模型或输出密钥。若该地址404，或仍显示旧接口，请先停止旧服务，切换到修复分支并重启；历史会话中的旧错误不会因更新自动消失。
+
+```bash
+git fetch origin
+git switch codex/fix-loading-image-config-20261020
+git pull --ff-only
+npm ci
+npm run doctor
+npm run dev
+```
+
+`doctor` 同时显示项目目录、分支和提交，用来识别在其他目录或分支更新代码的情况。使用 `npm start` 的用户需先执行 `npm run build`，否则仍会运行上一次构建。
+
+素材生成默认“完整4张”：使用场景全景、材质纹理细节、外观造型细节、结构视角细节。生成前可选“试生成1张”。万相完整方案只提交一次任务，设置 `n=1, max_images=4, enable_interleave=true`；其 `n` 并非输出图片上限。返回不足4张时保留实际图片并提示数量，不自动补图。
+
+输出增加 `generatedImageUrls`、`images`、`image_urls_text` 和 `requestedImageCount`；`generatedImageUrl` 始终等于首张。移动端显示全部图片，可分别查看原图、下载，复制内容包含全部公网图片链接。纯文案的图片数组与配图地址文本均为空。
+
+当前仅使用文本和商品事实生成示意图，分镜描述不包含未经证实的功能。4张商品外观的一致性和实际画质仍须用真实模型结果验收，模拟服务验证不代表模型效果。

@@ -1,4 +1,6 @@
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { imageDiagnostics } from '../server/runtime-info.mjs';
 import { fileURLToPath } from 'node:url';
 import { loadProjectEnv } from '../server/env.mjs';
 import { imageRequest, imageStatus } from '../server/image.mjs';
@@ -13,21 +15,15 @@ const sources = Object.fromEntries(names.map(name => {
   const files = loadedEnvFiles.filter(file => Object.hasOwn(file.env, name)).map(file => file.path);
   return [name, { effective: inherited.has(name) ? '进程环境变量' : files[0] || '未配置', shadowed: inherited.has(name) ? files : files.slice(1) }];
 }));
-const status = imageStatus();
-let endpoint = null;
-let protocol = null;
-try {
-  const request = imageRequest({name:'配置检查'});
-  const parsed = new URL(request.url);
-  endpoint = parsed.origin + parsed.pathname; // No userinfo, query, or API key in output.
-  protocol = request.kind;
-} catch {}
+const diagnostics = imageDiagnostics(process.env, imageStatus, imageRequest);
+const gitValue = args => { try { return execFileSync('git', args, {cwd:root,encoding:'utf8',stdio:['ignore','pipe','ignore'],timeout:2000}).trim(); } catch { return null; } };
 console.log(JSON.stringify({
   mode: process.env.NODE_ENV,
   loadedFiles: loadedEnvFiles.map(file => file.path),
-  image: status,
-  endpoint,
-  protocol,
+  projectDirectory: root,
+  branch: gitValue(['branch', '--show-current']),
+  commit: gitValue(['rev-parse', '--short', 'HEAD']),
+  ...diagnostics,
   sources,
   note: '仅检查本地配置，不调用模型、不扣费。不证明密钥权限或账户余额有效。修改配置后请重启本地服务。',
 }, null, 2));

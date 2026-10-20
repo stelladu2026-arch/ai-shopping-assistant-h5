@@ -46,6 +46,7 @@ export function resetToBlankCopyCard<T extends PieceMessage>(
   const discarded = Array.isArray(messages) ? messages.length : 0;
   const nextSnapshot: MomentsGenerationInput = {
     outputKind: snapshot?.outputKind || "rich",
+    imageCount: snapshot?.imageCount === 1 ? 1 : 4,
     productName: snapshot?.productName || "",
     sellingPoints: [...(snapshot?.sellingPoints ?? [])],
     copyStyle: snapshot?.copyStyle || "warm",

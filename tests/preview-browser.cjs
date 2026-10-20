@@ -15,23 +15,26 @@ const projectRoot = path.resolve(__dirname,'..');
  const provider = createServer(async (req,res)=>{
   let raw='';for await(const chunk of req) raw+=chunk;
   try {
+   if (req.method==='GET' && /^\/fixture-[1-4]\.png$/.test(req.url)) {
+    res.writeHead(200,{'Content-Type':'image/png'});res.end(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==','base64'));return;
+   }
    assert.equal(req.headers.authorization,'Bearer local-fixture-only');
-   const imageUrl='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+   const imageUrls=Array.from({length:4},(_,i)=>`http://127.0.0.1:${provider.address().port}/fixture-${i+1}.png`);
    if (wan && req.method==='GET') {
     assert.equal(req.url,'/api/v1/tasks/wan-browser-fixture');
     res.writeHead(200,{'Content-Type':'application/json'});
-    res.end(JSON.stringify({output:{task_status:'SUCCEEDED',choices:[{message:{content:[{image:imageUrl}]}}]}}));return;
+    res.end(JSON.stringify({output:{task_status:'SUCCEEDED',choices:[{message:{content:[{text:'四张商品图'},...imageUrls.map(image=>({image}))]}}]}}));return;
    }
    assert.equal(req.method,'POST');const body=JSON.parse(raw);assert.equal(body.model,imageModel);
    if (wan) {
     assert.equal(req.url,'/api/v1/services/aigc/image-generation/generation');
     assert.equal(req.headers['x-dashscope-async'],'enable');
-    assert.equal(body.parameters.enable_interleave,true);assert.equal(body.parameters.max_images,1);assert.equal(body.parameters.n,1);
+    assert.equal(body.parameters.enable_interleave,true);assert.equal(body.parameters.max_images,4);assert.equal(body.parameters.n,1);
    } else {
-    assert.equal(req.url,'/compatible-mode/v1/images/generations');assert.equal(body.n,1);assert.equal(body.size,'1024x1024');assert.equal(body.enable_thinking,false);
+    assert.equal(req.url,'/compatible-mode/v1/images/generations');assert.equal(body.n,4);assert.equal(body.size,'1024x1024');assert.equal(body.enable_thinking,false);
    }
    imageCalls++;res.writeHead(200,{'Content-Type':'application/json'});
-   res.end(JSON.stringify(wan ? {output:{task_id:'wan-browser-fixture',task_status:'PENDING'}} : {data:[{url:imageUrl}]}));
+   res.end(JSON.stringify(wan ? {output:{task_id:'wan-browser-fixture',task_status:'PENDING'}} : {data:imageUrls.map(url=>({url}))}));
   }catch(error){res.writeHead(400);res.end(JSON.stringify({message:error.message}));}
  });
  await new Promise(resolve=>provider.listen(0,'127.0.0.1',resolve));
@@ -82,7 +85,16 @@ const projectRoot = path.resolve(__dirname,'..');
   }
   await page.getByAltText('AI 生成配图',{exact:true}).last().waitFor({timeout:30000});
   await page.waitForFunction(()=>Array.from(document.images).some(img=>img.alt==='AI 生成配图' && img.complete && img.naturalWidth>0));
-  assert.equal(imageCalls,1);console.log('DOTENV -> IMAGE PROVIDER -> VISIBLE IMAGE OK (one request)');
+  assert.equal(imageCalls,1);
+  assert.equal(await page.locator('[data-image-gallery] img').count(),4);
+  await page.getByText('1. 使用场景全景',{exact:true}).last().waitFor();
+  console.log('DOTENV -> IMAGE PROVIDER -> FOUR VISIBLE IMAGES OK (one generation task)');
+  const diagnostics=await page.request.get('http://127.0.0.1:3100/api/diagnostics');
+  const runtime=await diagnostics.json();assert.equal(runtime.runtimeVersion,'guide-wan26-four-images-20261020');
+  assert.equal(runtime.protocol,wan ? 'multimodal-async' : 'compatible');
+  assert.equal(JSON.stringify(runtime).includes('local-fixture-only'),false);
+  console.log('ACTIVE RUNTIME DIAGNOSTICS OK');
+  if(process.env.PREVIEW_GALLERY_SCREENSHOT) await page.locator('[data-image-gallery]').screenshot({path:process.env.PREVIEW_GALLERY_SCREENSHOT});
   await page.getByText('选品推荐',{exact:true}).click();
   // A failed confirmation must show feedback and release the global sending state.
   await page.getByPlaceholder('说说预算、宽度、颜色或材质').fill('预算改为2500');

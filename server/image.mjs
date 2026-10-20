@@ -1,3 +1,4 @@
+import { normalizeImageCount, imageShotPrompt } from "./image-plan.mjs";
 function imageEnabled(env) {
   const flag = cleanEnv(env?.GUIDE_IMAGE_ENABLED).toLowerCase();
   return flag !== 'false' && flag !== '0' && flag !== 'off';
@@ -34,9 +35,9 @@ function imageSize(model, kind) {
   return '1024*1024';
 }
 
-function fastOptions(model) {
+function fastOptions(model, count = 1) {
   // Text-only requests require interleaved mode; its default max_images is 5.
-  if (wan26Image(model)) return { enable_interleave: true, max_images: 1 };
+  if (wan26Image(model)) return { enable_interleave: true, max_images: normalizeImageCount(count) };
   return modernQwen(model) ? { enable_thinking: false, watermark: false } : {};
 }
 
@@ -48,14 +49,14 @@ function stripImageRefs(text) {
   return value.replace(/\s+/g, ' ').trim();
 }
 
-function furniturePrompt(product) {
+function furniturePrompt(product, count = 1) {
   const name = stripImageRefs(product?.name || '');
   const color = stripImageRefs(product?.color || '');
   const material = stripImageRefs(product?.material || '');
   const model = stripImageRefs(product?.model || '');
   const extra = stripImageRefs(product?.prompt || '');
   const sentence = `家具示意。保持资料中的名称、颜色和材质，不要改成另一种商品。${name}，${color}${material}，型号${model}。`;
-  return stripImageRefs(extra ? `${sentence}${extra}` : sentence);
+  return stripImageRefs(`${sentence}${extra}${imageShotPrompt(count)}`);
 }
 
 function dashscopeHost(hostname) {
@@ -145,34 +146,35 @@ function imageEndpoint(base, model) {
   return {url: trimmed + '/images/generations', native: false, kind: 'openai'};
 }
 
-function imageBody(product, model, kind) {
-  const prompt = furniturePrompt(product);
+function imageBody(product, model, kind, count = 1) {
+  const prompt = furniturePrompt(product, count);
   const size = imageSize(model, kind);
   if (kind === 'multimodal' || kind === 'multimodal-async') {
-    return {model, input: {messages: [{role: 'user', content: [{text: prompt}]}]}, parameters: {size, n: 1, watermark: false, ...fastOptions(model)}};
+    return {model, input: {messages: [{role: 'user', content: [{text: prompt}]}]}, parameters: {size, n: wan26Image(model) ? 1 : count, watermark: false, ...fastOptions(model, count)}};
   }
-  if (kind === 'async') return {model, input: {prompt}, parameters: {size, n: 1}};
-  if (kind === 'compatible') return {model, prompt, size, n: 1, prompt_extend: true, ...fastOptions(model)};
-  return {model, prompt, size, n: 1};
+  if (kind === 'async') return {model, input: {prompt}, parameters: {size, n: count}};
+  if (kind === 'compatible') return {model, prompt, size, n: count, prompt_extend: true, ...fastOptions(model, count)};
+  return {model, prompt, size, n: count};
 }
 
 function outgoingBody(request) {
   const kind = request?.kind;
   const source = request?.body || {};
+  const count = normalizeImageCount(request?.imageCount);
   const nested = source.input?.messages?.[0]?.content?.[0]?.text;
   const prompt = stripImageRefs(source.prompt || source.input?.prompt || nested || '');
   if (kind === 'multimodal' || kind === 'multimodal-async') {
     return {
       model: source.model,
       input: {messages: [{role: 'user', content: [{text: prompt}]}]},
-      parameters: {size: source.parameters?.size, n: 1, watermark: false, ...fastOptions(source.model)},
+      parameters: {size: source.parameters?.size, n: wan26Image(source.model) ? 1 : count, watermark: false, ...fastOptions(source.model, count)},
     };
   }
   if (kind === 'async') {
-    return {model: source.model, input: {prompt}, parameters: {size: source.parameters?.size, n: 1}};
+    return {model: source.model, input: {prompt}, parameters: {size: source.parameters?.size, n: count}};
   }
-  if (kind === 'compatible') return {model: source.model, prompt, size: '1024x1024', n: 1, prompt_extend: true, ...fastOptions(source.model)};
-  return {model: source.model, prompt, size: source.size, n: 1};
+  if (kind === 'compatible') return {model: source.model, prompt, size: '1024x1024', n: count, prompt_extend: true, ...fastOptions(source.model, count)};
+  return {model: source.model, prompt, size: source.size, n: count};
 }
 
 function taskEndpoint(endpoint, taskId) {
@@ -310,28 +312,20 @@ function nestedImage(value, depth) {
     || b64Image(value.b64_json);
 }
 
-function imageUrlFrom(payload) {
-  if (!payload || typeof payload !== 'object') return '';
-  const rows = [];
-  if (Array.isArray(payload.data)) rows.push(...payload.data);
-  else if (payload.data && typeof payload.data === 'object') rows.push(payload.data);
-  if (Array.isArray(payload.output?.results)) rows.push(...payload.output.results);
-  for (const item of rows) {
-    const url = nestedImage(item, 0);
-    if (url) return url;
-  }
-  const choices = []
-    .concat(Array.isArray(payload.choices) ? payload.choices : [])
-    .concat(Array.isArray(payload.output?.choices) ? payload.output.choices : []);
+function imageUrlsFrom(payload) {
+  if (!payload || typeof payload !== 'object') return [];
+  const urls = [];
+  const add = value => { const url = nestedImage(value, 0); if (url && !urls.includes(url)) urls.push(url); };
+  if (Array.isArray(payload.data)) payload.data.forEach(add);
+  else if (payload.data && typeof payload.data === 'object') add(payload.data);
+  if (Array.isArray(payload.output?.results)) payload.output.results.forEach(add);
+  const choices = [...(Array.isArray(payload.choices) ? payload.choices : []), ...(Array.isArray(payload.output?.choices) ? payload.output.choices : [])];
   for (const choice of choices) {
     const content = choice?.message?.content;
-    const parts = Array.isArray(content) ? content : [content];
-    for (const part of parts) {
-      const url = nestedImage(part, 0);
-      if (url) return url;
-    }
+    (Array.isArray(content) ? content : [content]).forEach(add);
   }
-  return nestedImage(payload.output, 0) || nestedImage(payload.url, 0);
+  if (!urls.length) { add(payload.output); add(payload.url); }
+  return urls.slice(0, 4);
 }
 
 async function readPayload(response) {
@@ -361,9 +355,9 @@ async function finishImage(response, request, secret = '', known, endpoint) {
     const code = redactDetail(String(payload?.code || payload?.error?.code || ''), secret);
     return {...failedCall(request, label + (requestId ? `；请求编号：${requestId}` : ''), {quota}), httpStatus: status, code, requestId};
   }
-  const url = imageUrlFrom(payload);
-  if (!url) return failedCall(request, '返回里没有图片地址', {quota});
-  return {simulation: false, called: true, pending_human: true, ok: true, url, label: '待核对', request};
+  const urls = imageUrlsFrom(payload);
+  if (!urls.length) return failedCall(request, '返回里没有图片地址', {quota});
+  return producedUrls(urls, request);
 }
 
 function modelEndpointIssue(base, model) {
@@ -420,8 +414,12 @@ function taskFailure(response, payload, request, secret, endpoint) {
   return failedCall(request, label, {quota});
 }
 
-function producedUrl(url, request) {
-  return {simulation: false, called: true, pending_human: true, ok: true, url, label: '待核对', request};
+function producedUrls(urls, request) {
+  const requestedCount = normalizeImageCount(request?.imageCount);
+  const images = urls.slice(0, requestedCount);
+  return {simulation:false, called:true, pending_human:true, ok:true, url:images[0], urls:images,
+    requestedCount, partial:images.length < requestedCount,
+    label:images.length < requestedCount ? `已返回${images.length}/${requestedCount}张，未自动补图。` : '待核对', request};
 }
 
 async function pollNative(endpoint, request, secret, fetcher) {
@@ -435,8 +433,8 @@ async function pollNative(endpoint, request, secret, fetcher) {
     const payload = await readPayload(response);
     if (!response?.ok) return finishImage(response, request, secret, payload, endpoint);
     const taskStatus = String(payload?.output?.task_status || '');
-    const url = imageUrlFrom(payload);
-    if (url && taskStatus !== 'PENDING' && taskStatus !== 'RUNNING') return producedUrl(url, request);
+    const urls = imageUrlsFrom(payload);
+    if (urls.length && taskStatus !== 'PENDING' && taskStatus !== 'RUNNING') return producedUrls(urls, request);
     if (taskStatus === 'SUCCEEDED') return failedCall(request, '返回里没有图片地址');
     if (taskStatus === 'FAILED' || taskStatus === 'CANCELED' || taskStatus === 'UNKNOWN') {
       return taskFailure(response, payload, request, secret, endpoint);
@@ -449,8 +447,8 @@ async function readNative(response, request, secret, fetcher) {
   const payload = await readPayload(response);
   if (!response?.ok) return finishImage(response, request, secret, payload);
   const taskStatus = String(payload?.output?.task_status || '');
-  const url = imageUrlFrom(payload);
-  if (url && taskStatus !== 'PENDING' && taskStatus !== 'RUNNING') return producedUrl(url, request);
+  const urls = imageUrlsFrom(payload);
+  if (urls.length && taskStatus !== 'PENDING' && taskStatus !== 'RUNNING') return producedUrls(urls, request);
   if (taskStatus === 'FAILED' || taskStatus === 'CANCELED' || taskStatus === 'UNKNOWN') {
     return taskFailure(response, payload, request, secret);
   }
@@ -474,7 +472,7 @@ async function requestImage(request, env, fetcher) {
   return readNative(response, request, key, fetcher);
 }
 
-export function imageRequest(product, env = process.env) {
+export function imageRequest(product, env = process.env, options = {}) {
   const status = imageStatus(env);
   const base = cleanEnv(env.IMAGE_API_BASE).replace(/\/+$/, '');
   const model = cleanEnv(env.IMAGE_MODEL);
@@ -484,13 +482,14 @@ export function imageRequest(product, env = process.env) {
     url: endpoint.url,
     native: endpoint.native,
     kind: endpoint.kind,
-    body: imageBody(product, model, endpoint.kind),
+    imageCount: normalizeImageCount(options.imageCount),
+    body: imageBody(product, model, endpoint.kind, normalizeImageCount(options.imageCount)),
   };
 }
 
-export async function executeImage(product, env = process.env, fetcher = fetch) {
+export async function executeImage(product, env = process.env, fetcher = fetch, sessionId = null, options = {}) {
   const status = imageStatus(env);
-  const request = imageRequest(product, env);
+  const request = imageRequest(product, env, options);
   if (!status.ready) return skipped(request, status);
   try {
     const controller = new AbortController();

@@ -72,7 +72,7 @@ try {
   const disabled = await guideAct({
     action: "rerun-content",
     sessionId,
-    momentsInput: { outputKind: "rich", productName: "别的名字", sellingPoints: ["现货速发"], copyStyle: "warm", audience: "first_home" },
+    momentsInput: { outputKind: "rich", imageCount: 1, productName: "别的名字", sellingPoints: ["现货速发"], copyStyle: "warm", audience: "first_home" },
   });
   assert.equal(disabledCalls, 0);
   assert.equal(disabled.ok, true);
@@ -100,7 +100,7 @@ try {
   const billed = await guideAct({
     action: "rerun-content",
     sessionId,
-    momentsInput: { outputKind: "rich", productName: "别的名字", sellingPoints: ["现货速发"], copyStyle: "warm", audience: "first_home" },
+    momentsInput: { outputKind: "rich", imageCount: 1, productName: "别的名字", sellingPoints: ["现货速发"], copyStyle: "warm", audience: "first_home" },
   });
   assert.equal(billedCalls, 1);
   assert.equal(billed.ok, true);
@@ -125,7 +125,7 @@ try {
   assert.equal(shown.simulation, false);
   assert.equal(shown.called, true);
 
-  const momentsInput = { outputKind: "rich", productName: "别的名字", sellingPoints: ["现货速发"], copyStyle: "warm", audience: "first_home" };
+  const momentsInput = { outputKind: "rich", imageCount: 1, productName: "别的名字", sellingPoints: ["现货速发"], copyStyle: "warm", audience: "first_home" };
   async function readySession(sessionId) {
     await guideAct({ action: "reset", sessionId });
     await guideAct({

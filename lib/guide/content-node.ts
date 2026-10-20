@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { executeImage } from "./image";
+import { MARKETING_IMAGE_SHOTS, normalizeImageCount } from "../../server/image-plan.mjs";
 import { executeLiveCopy, modelStatus } from "./model";
 import { consumeCall, loadStep, releaseCall, resetPieceCalls, saveStep } from "./db";
 import { LIMITS, capText, FAILURE_TEXT } from "./limits";
@@ -95,6 +96,7 @@ export async function runContentNode(session, request) {
     sellingPoints: request?.momentsInput?.sellingPoints || session.record.materialInput?.sellingPoints || [],
     copyStyle: request?.momentsInput?.copyStyle || session.record.materialInput?.copyStyle || "warm",
     audience: request?.momentsInput?.audience || session.record.materialInput?.audience || "first_home",
+    imageCount: normalizeImageCount(request?.momentsInput?.imageCount ?? session.record.materialInput?.imageCount, 4),
   };
   const readyForProduct = Boolean(confirmedId && facts && facts.id === confirmedId);
   const owners = [session.record.pieceProductId, session.record.material?.usedProductId].filter(Boolean);
@@ -151,11 +153,12 @@ export async function runContentNode(session, request) {
     let imageCapped = false;
     let imageNetwork = false;
     let imageUrl = "";
+    let imageUrls = [];
     let imagePlaceholder = "";
     if (wantsImage) {
       let generated;
       try {
-        generated = await executeImage(facts, process.env, fetch, session.id, { withinPiece: true });
+        generated = await executeImage(facts, process.env, fetch, session.id, { withinPiece: true, imageCount: form.imageCount });
       } catch {
         generated = {simulation: false, called: true, url: "", label: "返回里没有图片地址"};
       }
@@ -164,8 +167,9 @@ export async function runContentNode(session, request) {
       imageUrl = generated?.url && !generated.simulation && !generated.quota && !generated.capped && !generated.network
         ? String(generated.url)
         : "";
+      imageUrls = imageUrl ? (Array.isArray(generated.urls) && generated.urls.length ? generated.urls : [imageUrl]) : [];
       imagePlaceholder = imageUrl
-        ? ""
+        ? (generated.partial ? generated.label : "")
         : String(generated.label || (generated.called ? "返回里没有图片地址" : "没有调用生图接口"));
       session.record.image = {
         simulation: !imageUrl,
@@ -174,6 +178,7 @@ export async function runContentNode(session, request) {
         product_id: facts.id,
         request: generated.request || null,
         url: imageUrl,
+        urls: imageUrls,
       };
     }
     if (session.record.state.confirmed_product_id !== confirmedId) {
@@ -191,6 +196,10 @@ export async function runContentNode(session, request) {
       hashtags: [],
       imageSuggestion: "",
       generatedImageUrl: imageUrl,
+      generatedImageUrls: imageUrls,
+      image_urls_text: imageUrls.length ? `配图地址：${imageUrls.join(' ')}` : '',
+      images: imageUrls.map((url, index) => ({url, ...MARKETING_IMAGE_SHOTS[index]})),
+      requestedImageCount: wantsImage ? form.imageCount : 0,
       imagePlaceholder,
       commentThreadScript: "",
       pendingReview: false,
