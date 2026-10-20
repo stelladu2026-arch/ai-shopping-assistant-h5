@@ -122,7 +122,7 @@ function navigateToPolicyQuery(router: ReturnType<typeof useRouter>) {
 function MarketingSubActionButtons({ subs }: { subs: NonNullable<QuickActionData["subActions"]> }) {
   const router = useRouter();
   return (
-    <div className="mt-3 grid w-full grid-cols-3 gap-2">
+    <div className="mt-4 grid w-full grid-cols-3 gap-2">
       {subs.map((sub) => (
         <button
           key={sub.id}
@@ -138,7 +138,7 @@ function MarketingSubActionButtons({ subs }: { subs: NonNullable<QuickActionData
             });
             router.push(`/chat?${q.toString()}`);
           }}
-          className="flex h-9 min-w-0 cursor-pointer items-center justify-center rounded-lg border border-border bg-background px-1 text-center text-xs font-semibold leading-tight text-foreground transition-all duration-150 hover:bg-accent active:scale-[0.98]"
+          className="flex min-h-11 min-w-0 cursor-pointer items-center justify-center rounded-xl border border-border bg-background px-2 py-2 text-center text-[13px] font-semibold leading-snug text-foreground transition-colors duration-150 hover:bg-accent active:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         >
           {sub.label}
         </button>
@@ -167,12 +167,10 @@ function RowBody({ item, hasSubActions }: { item: QuickActionData; hasSubActions
             </p>
           ) : null}
         </div>
-        <ChevronRightIcon />
+        {hasSubActions ? null : <ChevronRightIcon />}
       </div>
       {hasSubActions ? (
-        <div className="pl-14">
-          <MarketingSubActionButtons subs={item.subActions!} />
-        </div>
+        <MarketingSubActionButtons subs={item.subActions!} />
       ) : null}
     </div>
   );
@@ -183,9 +181,9 @@ export function ActionCard({ item }: ActionCardProps) {
   const hasSubActions = Boolean(item.subActions?.length);
 
   const rowInteractive =
-    "flex w-full cursor-pointer bg-card px-4 py-3.5 text-left transition-colors duration-150 hover:bg-accent/60 active:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
+    "flex h-full min-h-36 w-full items-center cursor-pointer bg-card px-4 py-4 text-left transition-colors duration-150 hover:bg-accent/60 active:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
 
-  const rowGrouped = "flex w-full cursor-default bg-card px-4 py-3.5 text-left";
+  const rowGrouped = "flex h-full min-h-36 w-full items-center cursor-default bg-card px-4 py-4 text-left";
 
   const rowClassName = hasSubActions ? rowGrouped : rowInteractive;
 

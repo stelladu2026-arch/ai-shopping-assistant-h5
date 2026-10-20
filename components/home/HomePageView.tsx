@@ -77,10 +77,9 @@ export function HomePageView({ data }: HomePageViewProps) {
 
             <section>
               <SectionHeader>{data.sectionTitles.quickActions}</SectionHeader>
-              <Card>
-                {data.quickActions.map((item, index) => (
-                  <div key={item.id}>
-                    {index > 0 ? <Separator /> : null}
+              <Card className="grid auto-rows-fr divide-y divide-border">
+                {data.quickActions.map((item) => (
+                  <div key={item.id} className="min-w-0">
                     <ActionCard item={item} />
                   </div>
                 ))}
