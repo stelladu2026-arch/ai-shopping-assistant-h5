@@ -171,7 +171,8 @@ export async function runContentNode(session, request) {
       imagePlaceholder = imageUrl
         ? (generated.partial ? generated.label : "")
         : String(generated.label || (generated.called ? "返回里没有图片地址" : "没有调用生图接口"));
-      session.record.image = {
+      // Keep the last usable image when this request fails; report the new failure separately.
+      if (imageUrl) session.record.image = {
         simulation: !imageUrl,
         called: Boolean(generated.called),
         label: imageUrl ? (generated.label || "待核对") : imagePlaceholder,
@@ -180,6 +181,16 @@ export async function runContentNode(session, request) {
         url: imageUrl,
         urls: imageUrls,
       };
+      if (form.outputKind === "image_only" && !imageUrl) {
+        releaseCall(session.id, "content");
+        saveStep(session.id, "content", {
+          status: "failed",
+          input: { form, confirmedId, searchedProducts: false },
+          keepOutput: true,
+          error: imagePlaceholder,
+        });
+        return { ok: false, error: "image_failed", reply: imagePlaceholder };
+      }
     }
     if (session.record.state.confirmed_product_id !== confirmedId) {
       throw new Error("confirmed_product_changed");

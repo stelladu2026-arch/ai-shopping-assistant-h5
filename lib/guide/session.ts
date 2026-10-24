@@ -42,6 +42,21 @@ function sessionFor(raw) {
   return { id, record: loadSession(id) || blank() };
 }
 
+// Prevent overlapping mutations within a server instance. Durable cross-instance coordination
+// still requires shared storage; this guard does not claim to provide that guarantee.
+const activeSessions = globalThis.__guideActiveSessions || (globalThis.__guideActiveSessions = new Set());
+const BUSY_TEXT = "当前会话的请求仍在处理中，请等待结果后再操作。未提交新的生成请求。";
+
+function materialFailure(input, text) {
+  return {
+    scene: "moments_marketing", outputKind: input?.outputKind || "rich",
+    cardTitle: "素材没有生成", bodyTitle: "", bodyText: text,
+    hashtags: [], imageSuggestion: "", generatedImageUrl: "", generatedImageUrls: [],
+    image_urls_text: "", imagePlaceholder: input?.outputKind === "copy_only" ? "" : text,
+    commentThreadScript: "",
+  };
+}
+
 function sessionMemory(memory, id) {
   if (!memory.sessions[id]) memory.sessions[id] = [];
   return memory.sessions[id];
@@ -62,7 +77,14 @@ function makeMemory(scope, customerId, key, value) {
   };
 }
 
-function persist(session, memory) {
+function persist(session, memory, preserveTranscript = false) {
+  if (preserveTranscript) {
+    const latest = loadSession(session.id);
+    if (latest) {
+      session.record.transcript = latest.transcript;
+      session.record.customerName = latest.customerName;
+    }
+  }
   saveSession(session.id, session.record);
   if (memory) saveMemory(memory);
 }
@@ -250,6 +272,17 @@ function graphView(ran) {
 }
 
 export async function guideMaterial(input, sessionId, options = {}) {
+  const { id } = sessionFor(sessionId);
+  if (activeSessions.has(id)) return materialFailure(input, BUSY_TEXT);
+  activeSessions.add(id);
+  try {
+    return await runMaterial(input, id, options);
+  } finally {
+    activeSessions.delete(id);
+  }
+}
+
+async function runMaterial(input, sessionId, options = {}) {
   const session = sessionFor(sessionId);
   const ran = await runGuideGraph(session, {
     intent: "content",
@@ -257,7 +290,7 @@ export async function guideMaterial(input, sessionId, options = {}) {
     newPiece: options?.newPiece === true,
     pieceId: options?.pieceId || "",
   });
-  persist(session, null);
+  persist(session, null, true);
   if (ran.capped) {
     return {
       scene: "moments_marketing",
@@ -276,6 +309,9 @@ export async function guideMaterial(input, sessionId, options = {}) {
     };
   }
   if (!ran.ok) {
+    if (ran.error === "image_failed") {
+      return { ...materialFailure(input, ran.reply || "配图没有生成，请核对本次错误提示。"), graph: graphView(ran) };
+    }
     return {
       scene: "moments_marketing",
       outputKind: input?.outputKind || "rich",
@@ -298,6 +334,18 @@ export async function guideMaterial(input, sessionId, options = {}) {
 }
 
 export async function guideAct(body) {
+  const { id } = sessionFor(body.sessionId || body.customerId || body.customer_id);
+  if (["status", "load", "sync", "lookup"].includes(body.action)) return runAction(body);
+  if (activeSessions.has(id)) return { ok: false, error: "session_busy", leadText: BUSY_TEXT };
+  activeSessions.add(id);
+  try {
+    return await runAction(body);
+  } finally {
+    activeSessions.delete(id);
+  }
+}
+
+async function runAction(body) {
   if (body.action === "lookup") return await lookupStoreDoc(body.query || body.text);
   const memory = loadMemory();
   const session = sessionFor(body.sessionId || body.customerId || body.customer_id);
@@ -431,7 +479,7 @@ export async function guideAct(body) {
     else if (ran.ok) session.record.failure = null;
     result = {
       ok: ran.ok,
-      leadText: ran.capped ? ran.reply : ran.ok ? "素材已重新生成，请核对后再复制发给顾客。" : ran.error === "need_confirm" ? "先点选确认商品，再生成素材。" : ran.failure === "network" ? FAILURE_TEXT.network : "素材没有生成，可以再试一次。已确认商品还在。",
+      leadText: ran.capped ? ran.reply : ran.ok ? "素材已重新生成，请核对后再复制发给顾客。" : ran.error === "need_confirm" ? "先点选确认商品，再生成素材。" : ran.reply || (ran.failure === "network" ? FAILURE_TEXT.network : "素材没有生成，可以再试一次。已确认商品还在。"),
       graph: graphView(ran),
       structured: ran.output ? { ...snapshot(session, memory), material: snapshot(session, memory).material, moments: ran.output } : snapshot(session, memory),
       moments: ran.output || null,
@@ -569,7 +617,9 @@ export async function guideAct(body) {
       steps: loadSteps(session.id),
     };
   }
-  persist(session, memory);
+  if (action !== "status" && action !== "load") {
+    persist(session, ["remember", "delete-memory"].includes(action) ? memory : null, action !== "sync" && action !== "reset");
+  }
   return result;
 }
 

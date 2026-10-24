@@ -23,7 +23,10 @@ export async function POST(req: Request) {
     const payload: AgentChatResponseBody = {
       messageId: `material_${Date.now()}`,
       done: true,
-      leadText: failed || capped ? structured.bodyText : "素材已生成，请核对后再复制发给顾客。",
+      leadText: failed || capped ? structured.bodyText
+        : structured.outputKind !== "copy_only" && !structured.generatedImageUrl
+          ? `文案已生成，配图未完成：${structured.imagePlaceholder || "请查看本次生成提示。"}`
+          : "素材已生成，请核对后再复制发给顾客。",
       structured,
     };
     return NextResponse.json(payload);
