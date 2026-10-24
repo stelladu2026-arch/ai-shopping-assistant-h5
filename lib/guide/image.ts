@@ -505,7 +505,7 @@ export async function executeImage(product, env = process.env, fetcher = fetch, 
   if (sessionId && !withinPiece) {
     const { consumeCall } = await import("./db");
     const { LIMITS, capText } = await import("./limits");
-    const gate = consumeCall(sessionId, "image", LIMITS.image);
+    const gate = (await consumeCall(sessionId, "image", LIMITS.image));
     if (!gate.ok) {
       return {simulation: true, called: false, capped: true, pending_human: true, label: capText("image"), request};
     }
@@ -526,12 +526,12 @@ export async function executeImage(product, env = process.env, fetcher = fetch, 
   const produced = producedImage(result);
   if (charged && !produced) {
     const { releaseCall } = await import("./db");
-    releaseCall(sessionId, "image");
+    (await releaseCall(sessionId, "image"));
   }
   if (withinPiece && sessionId && produced) {
     const { consumeCall } = await import("./db");
     const { LIMITS } = await import("./limits");
-    consumeCall(sessionId, "image", LIMITS.image);
+    (await consumeCall(sessionId, "image", LIMITS.image));
   }
   return result;
 }

@@ -7,5 +7,7 @@ export function imageDiagnostics(
   runtimeVersion:string;diagnosticsVersion:string;
   deployment:{projectId:string|null;environment:string|null;commit:string|null;host:string|null};
   configurationKeys:{recognized:string[];unrecognized:string[]};
+  storage:{mode:string;configured:boolean;credentialsConfigured:boolean;configurationReady:boolean;connectivityChecked:boolean;note:string};
   image:unknown;endpoint:string|null;protocol:string|null;
 };
+export function storageDiagnostics(env: NodeJS.ProcessEnv): {mode:string;configured:boolean;credentialsConfigured:boolean;configurationReady:boolean;connectivityChecked:boolean;note:string};

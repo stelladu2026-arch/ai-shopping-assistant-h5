@@ -89,7 +89,7 @@ function customerSentence(facts, sealed) {
 export async function runContentNode(session, request) {
   const confirmedId = session.record.state.confirmed_product_id || null;
   const candidatesBefore = JSON.stringify(session.record.state.candidate_ids || []);
-  const facts = loadStep(session.id, "product_decision")?.output?.confirmedFacts || null;
+  const facts = (await loadStep(session.id, "product_decision"))?.output?.confirmedFacts || null;
   const form = {
     outputKind: request?.momentsInput?.outputKind || session.record.materialInput?.outputKind || "rich",
     productName: request?.momentsInput?.productName || session.record.materialInput?.productName || "",
@@ -100,36 +100,36 @@ export async function runContentNode(session, request) {
   };
   const readyForProduct = Boolean(confirmedId && facts && facts.id === confirmedId);
   const owners = [session.record.pieceProductId, session.record.material?.usedProductId].filter(Boolean);
-  if (readyForProduct && owners.some((id) => id !== confirmedId)) resetPieceCalls(session.id);
+  if (readyForProduct && owners.some((id) => id !== confirmedId)) (await resetPieceCalls(session.id));
   if (readyForProduct) session.record.pieceProductId = confirmedId;
-  if (request?.newPiece) resetPieceCalls(session.id);
-  const gate = consumeCall(session.id, "content", LIMITS.content);
+  if (request?.newPiece) (await resetPieceCalls(session.id));
+  const gate = (await consumeCall(session.id, "content", LIMITS.content));
   if (!gate.ok) {
     return { ok: true, capped: true, reply: capText("content") };
   }
-  saveStep(session.id, "content", {
+  (await saveStep(session.id, "content", {
     status: "running",
     input: { form, confirmedId, searchedProducts: false },
     error: null,
-  });
+  }));
   if (request?.forceFail) {
-    releaseCall(session.id, "content");
-    saveStep(session.id, "content", {
+    (await releaseCall(session.id, "content"));
+    (await saveStep(session.id, "content", {
       status: "failed",
       input: { form, confirmedId, searchedProducts: false },
       keepOutput: true,
       error: "素材没有生成，可以再试一次。",
-    });
+    }));
     return { ok: false, error: "content_failed" };
   }
   if (!confirmedId || !facts || facts.id !== confirmedId) {
-    releaseCall(session.id, "content");
-    saveStep(session.id, "content", {
+    (await releaseCall(session.id, "content"));
+    (await saveStep(session.id, "content", {
       status: "failed",
       input: { form, confirmedId, searchedProducts: false },
       keepOutput: true,
       error: "先点选确认商品，再生成素材。",
-    });
+    }));
     return { ok: false, error: "need_confirm" };
   }
   try {
@@ -182,13 +182,13 @@ export async function runContentNode(session, request) {
         urls: imageUrls,
       };
       if (form.outputKind === "image_only" && !imageUrl) {
-        releaseCall(session.id, "content");
-        saveStep(session.id, "content", {
+        (await releaseCall(session.id, "content"));
+        (await saveStep(session.id, "content", {
           status: "failed",
           input: { form, confirmedId, searchedProducts: false },
           keepOutput: true,
           error: imagePlaceholder,
-        });
+        }));
         return { ok: false, error: "image_failed", reply: imagePlaceholder };
       }
     }
@@ -222,24 +222,24 @@ export async function runContentNode(session, request) {
     if (imageNetwork) result.bodyText = `${result.bodyText}${imagePlaceholder}`;
     if (imageCapped) result.bodyText = `${result.bodyText}${capText("image")}`;
     const producedCopy = form.outputKind !== "image_only" && Boolean(String(bodyText || "").trim());
-    if (!producedCopy && !imageUrl) releaseCall(session.id, "content");
+    if (!producedCopy && !imageUrl) (await releaseCall(session.id, "content"));
     rememberMaterial(session, result, request);
     session.record.materialInput = { ...form, productName: facts.name };
-    saveStep(session.id, "content", {
+    (await saveStep(session.id, "content", {
       status: "completed",
       input: { form, confirmedId, searchedProducts: false },
       output: result,
       error: null,
-    });
+    }));
     return { ok: true, output: result, failure: result.failure };
   } catch (error) {
-    releaseCall(session.id, "content");
-    saveStep(session.id, "content", {
+    (await releaseCall(session.id, "content"));
+    (await saveStep(session.id, "content", {
       status: "failed",
       input: { form, confirmedId, searchedProducts: false },
       keepOutput: true,
       error: "素材没有生成，可以再试一次。",
-    });
+    }));
     return { ok: false, error: error?.message || "content_failed" };
   }
 }

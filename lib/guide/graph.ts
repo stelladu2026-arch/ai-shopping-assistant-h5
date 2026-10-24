@@ -39,7 +39,7 @@ function guideGraph() {
       run.trace.edge = edge;
       run.trace.entered.push("route");
       if (edge === "blocked") run.trace.result = { ok: false, error: "need_confirm" };
-      saveStep(run.session.id, "route", {
+      (await saveStep(run.session.id, "route", {
         status: "completed",
         input: publicRequest(run.request),
         output: {
@@ -50,7 +50,7 @@ function guideGraph() {
           entered: ["route"],
         },
         error: null,
-      });
+      }));
       return { edge };
     })
     .addNode("product_decision", async (state) => {
@@ -85,8 +85,8 @@ export async function runGuideGraph(session, request) {
   runs.set(runId, { session, request, trace });
   try {
     await guideGraph().invoke({ runId, edge: "" });
-    const row = loadStep(session.id, "route");
-    saveStep(session.id, "route", {
+    const row = (await loadStep(session.id, "route"));
+    (await saveStep(session.id, "route", {
       status: "completed",
       input: row?.input || publicRequest(request),
       output: {
@@ -98,7 +98,7 @@ export async function runGuideGraph(session, request) {
         note: routeNote(trace.edge, request),
       },
       error: null,
-    });
+    }));
     return {
       ok: trace.result?.ok !== false,
       edge: trace.edge,

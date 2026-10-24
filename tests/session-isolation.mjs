@@ -41,7 +41,7 @@ try {
   assert.equal(calls, 1);
   const loaded = await guideAct({ action: "load", sessionId: "overlap" });
   assert.equal(loaded.transcript.marker, "saved-during-generation");
-  assert.ok(guideMemoryBook().memory.guide.some(item => item.key === "独立记忆"));
+  assert.ok((await guideMemoryBook()).memory.guide.some(item => item.key === "独立记忆"));
 
   globalThis.fetch = async () => json(400, { code: "InvalidParameter", message: "fixture image failure" });
   const failed = await guideMaterial(input, "overlap", { newPiece: true });

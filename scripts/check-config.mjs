@@ -8,7 +8,7 @@ import { imageRequest, imageStatus } from '../server/image.mjs';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const production = process.argv.includes('--production');
 process.env.NODE_ENV = production ? 'production' : 'development';
-const names = ['GUIDE_IMAGE_ENABLED', 'IMAGE_API_BASE', 'IMAGE_MODEL', 'IMAGE_API_KEY', 'DASHSCOPE_API_KEY'];
+const names = ['GUIDE_IMAGE_ENABLED', 'IMAGE_API_BASE', 'IMAGE_MODEL', 'IMAGE_API_KEY', 'DASHSCOPE_API_KEY', 'GUIDE_DATABASE_URL', 'GUIDE_DATABASE_AUTH_TOKEN'];
 const inherited = new Set(names.filter(name => Object.hasOwn(process.env, name)));
 const { loadedEnvFiles } = loadProjectEnv(root, !production);
 const sources = Object.fromEntries(names.map(name => {
