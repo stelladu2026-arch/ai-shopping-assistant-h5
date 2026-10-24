@@ -3,7 +3,8 @@ import { absorbDemand, acceptProbe, appliedLead, constraintTags, createState, ed
 import { executeImage } from "./image";
 import { executeLiveCopy, interpretUtterance, modelStatus } from "./model";
 import { reflect } from "./reflect";
-import { deleteFavorite, deleteSteps, listFavorites, loadMemory, loadSession, loadStep, loadSteps, nextMemoryId, noteClarify, readCallCounts, readClarifyCounts, resetCallBudgets, saveFavorite, saveMemory, saveSession, saveStep } from "./db";
+import { deleteFavorite, deleteSteps, listFavorites, loadMemory, loadSession, loadStep, loadSteps, nextMemoryId, noteClarify, readCallCounts, readClarifyCounts, resetCallBudgets, saveFavorite, saveMemory, saveSession, saveStep, saveTranscript } from "./db";
+import { acquireSharedLease, sharedStorageEnabled } from "./shared-client";
 import { FAILURE_TEXT, LIMITS } from "./limits";
 import { dropUnverifiedModelText, sealFacts } from "./facts";
 import { runGuideGraph } from "./graph";
@@ -37,9 +38,13 @@ function blank() {
   return { state: createState(), messages: [], image: null, material: null, transcript: null, offerSwitch: false };
 }
 
-function sessionFor(raw) {
-  const id = String(raw || "session").replace(/[^\w-]/g, "").slice(0, 80) || "session";
-  return { id, record: loadSession(id) || blank() };
+function sessionIdFor(raw) {
+  return String(raw || "session").replace(/[^\w-]/g, "").slice(0, 80) || "session";
+}
+
+async function sessionFor(raw) {
+  const id = sessionIdFor(raw);
+  return { id, record: (await loadSession(id)) || blank() };
 }
 
 // Prevent overlapping mutations within a server instance. Durable cross-instance coordination
@@ -62,9 +67,9 @@ function sessionMemory(memory, id) {
   return memory.sessions[id];
 }
 
-function makeMemory(scope, customerId, key, value) {
+async function makeMemory(scope, customerId, key, value) {
   return {
-    id: nextMemoryId(),
+    id: (await nextMemoryId()),
     scope,
     customer_id: scope === "guide" ? null : customerId,
     session_id: scope === "guide" ? null : customerId,
@@ -77,16 +82,16 @@ function makeMemory(scope, customerId, key, value) {
   };
 }
 
-function persist(session, memory, preserveTranscript = false) {
-  if (preserveTranscript) {
-    const latest = loadSession(session.id);
+async function persist(session, memory, preserveTranscript = false) {
+  if (preserveTranscript && !sharedStorageEnabled()) {
+    const latest = (await loadSession(session.id));
     if (latest) {
       session.record.transcript = latest.transcript;
       session.record.customerName = latest.customerName;
     }
   }
-  saveSession(session.id, session.record);
-  if (memory) saveMemory(memory);
+  (await saveSession(session.id, session.record, { preserveTranscript }));
+  if (memory) (await saveMemory(memory));
 }
 
 function guideTone(memory) {
@@ -109,9 +114,12 @@ function retrievalOf(steps, decision) {
   return null;
 }
 
-function snapshot(session, memory) {
+async function snapshot(session, memory) {
   const state = session.record.state;
-  const steps = loadSteps(session.id);
+  const steps = (await loadSteps(session.id));
+  const [usage, clarify] = steps.route
+    ? await Promise.all([readCallCounts(session.id), readClarifyCounts(session.id)])
+    : [null, null];
   const decision = steps.product_decision?.output || steps.research?.output;
   const facts = decision?.confirmedFacts?.id === state.confirmed_product_id ? decision.confirmedFacts : null;
   const reflection = reflect(state, facts);
@@ -210,8 +218,8 @@ function snapshot(session, memory) {
           decision,
           contentStatus: steps.content?.status || null,
           productStatus: steps.product_decision?.status || null,
-          usage: readCallCounts(session.id),
-          clarify: readClarifyCounts(session.id),
+          usage,
+          clarify,
           failure: session.record.failure || null,
           degraded: facts ? sealFacts(facts, facts.promoPlan).degraded : [],
           retrieval: retrievalOf(steps, decision),
@@ -272,25 +280,30 @@ function graphView(ran) {
 }
 
 export async function guideMaterial(input, sessionId, options = {}) {
-  const { id } = sessionFor(sessionId);
+  const id = sessionIdFor(sessionId);
   if (activeSessions.has(id)) return materialFailure(input, BUSY_TEXT);
   activeSessions.add(id);
+  let lease;
   try {
-    return await runMaterial(input, id, options);
+    lease = await acquireSharedLease(`session:${id}`);
+    if (!lease) return materialFailure(input, BUSY_TEXT);
+    return await runMaterial(input, id, options, lease);
   } finally {
+    await lease?.release();
     activeSessions.delete(id);
   }
 }
 
-async function runMaterial(input, sessionId, options = {}) {
-  const session = sessionFor(sessionId);
+async function runMaterial(input, sessionId, options = {}, lease = null) {
+  const session = (await sessionFor(sessionId));
   const ran = await runGuideGraph(session, {
     intent: "content",
     momentsInput: input,
     newPiece: options?.newPiece === true,
     pieceId: options?.pieceId || "",
   });
-  persist(session, null, true);
+  await lease?.assertOwned();
+  (await persist(session, null, true));
   if (ran.capped) {
     return {
       scene: "moments_marketing",
@@ -334,36 +347,47 @@ async function runMaterial(input, sessionId, options = {}) {
 }
 
 export async function guideAct(body) {
-  const { id } = sessionFor(body.sessionId || body.customerId || body.customer_id);
+  const id = sessionIdFor(body.sessionId || body.customerId || body.customer_id);
   if (["status", "load", "sync", "lookup"].includes(body.action)) return runAction(body);
   if (activeSessions.has(id)) return { ok: false, error: "session_busy", leadText: BUSY_TEXT };
   activeSessions.add(id);
+  let lease;
+  let memoryLease;
   try {
-    return await runAction(body);
+    lease = await acquireSharedLease(`session:${id}`);
+    if (!lease) return { ok: false, error: "session_busy", leadText: BUSY_TEXT };
+    if (["remember", "delete-memory"].includes(body.action)) {
+      memoryLease = await acquireSharedLease("memories");
+      if (!memoryLease) return { ok: false, error: "session_busy", leadText: "记忆正在更新，请稍后再操作。" };
+    }
+    return await runAction(body, lease);
   } finally {
+    await memoryLease?.release();
+    await lease?.release();
     activeSessions.delete(id);
   }
 }
 
-async function runAction(body) {
+async function runAction(body, lease = null) {
   if (body.action === "lookup") return await lookupStoreDoc(body.query || body.text);
-  const memory = loadMemory();
-  const session = sessionFor(body.sessionId || body.customerId || body.customer_id);
+  const memory = (await loadMemory());
+  const session = (await sessionFor(body.sessionId || body.customerId || body.customer_id));
   const action = body.action || "turn";
   let result;
   if (action === "reset") {
     session.record = blank();
-    deleteSteps(session.id);
-    resetCallBudgets(session.id);
-    result = { ok: true, leadText: "已清空这次选品。", structured: snapshot(session, memory), steps: loadSteps(session.id) };
+    (await deleteSteps(session.id));
+    (await resetCallBudgets(session.id));
+    result = { ok: true, leadText: "已清空这次选品。", structured: (await snapshot(session, memory)), steps: (await loadSteps(session.id)) };
   } else if (action === "status") {
-    result = { ok: true, leadText: null, structured: snapshot(session, memory), memory, steps: loadSteps(session.id) };
+    result = { ok: true, leadText: null, structured: (await snapshot(session, memory)), memory, steps: (await loadSteps(session.id)) };
   } else if (action === "sync") {
     session.record.transcript = body.transcript || null;
     if (body.customerName != null) session.record.customerName = String(body.customerName || "").trim().slice(0, 20);
+    await saveTranscript(session.id, session.record);
     result = { ok: true, leadText: null };
   } else if (action === "load") {
-    result = { ok: true, transcript: session.record.transcript || null, structured: snapshot(session, memory) };
+    result = { ok: true, transcript: session.record.transcript || null, structured: (await snapshot(session, memory)) };
   } else if (action === "favorite") {
     const row = {
       id: String(body.id || `fav_${Date.now()}`),
@@ -375,10 +399,10 @@ async function runAction(body) {
       payload_json: "",
       created_at: Date.now(),
     };
-    saveFavorite(row);
+    (await saveFavorite(row));
     result = { ok: true, leadText: "已收藏。", favorite: row };
   } else if (action === "unfavorite") {
-    deleteFavorite(String(body.id || body.sourceMessageId || ""));
+    (await deleteFavorite(String(body.id || body.sourceMessageId || "")));
     result = { ok: true, leadText: "已取消收藏。" };
   } else if (action === "remember") {
     const scope = body.scope === "guide" ? "guide" : "customer";
@@ -386,11 +410,11 @@ async function runAction(body) {
     if (body.tone === "简洁" || body.tone === "热情") {
       const existing = memory.guide.find((item) => item.key === "语气");
       if (existing) existing.value = body.tone;
-      else memory.guide.push(makeMemory("guide", null, "语气", body.tone));
+      else memory.guide.push((await makeMemory("guide", null, "语气", body.tone)));
     } else {
-      bucket.push(makeMemory(scope, session.id, body.key, body.value));
+      bucket.push((await makeMemory(scope, session.id, body.key, body.value)));
     }
-    result = { ok: true, leadText: "已记住。这条记忆未验证，不会变成筛选规则。", structured: snapshot(session, memory), memory };
+    result = { ok: true, leadText: "已记住。这条记忆未验证，不会变成筛选规则。", structured: (await snapshot(session, memory)), memory };
   } else if (action === "delete-memory") {
     if (!body.id) memory.guide = memory.guide.filter((item) => item.key !== "语气");
     else {
@@ -399,13 +423,13 @@ async function runAction(body) {
         memory.sessions[key] = memory.sessions[key].filter((item) => item.id !== body.id);
       }
     }
-    result = { ok: true, leadText: "已删除这条记忆。", structured: snapshot(session, memory), memory };
+    result = { ok: true, leadText: "已删除这条记忆。", structured: (await snapshot(session, memory)), memory };
   } else if (action === "image") {
     if (session.record.state.revision !== Number(body.revision)) {
-      return { ok: false, error: "revision_conflict", structured: snapshot(session, memory) };
+      return { ok: false, error: "revision_conflict", structured: (await snapshot(session, memory)) };
     }
     const product = productById(session.record.state.confirmed_product_id);
-    if (!product) return { ok: false, error: "need_confirm", leadText: "先点选确认商品，再准备配图。", structured: snapshot(session, memory) };
+    if (!product) return { ok: false, error: "need_confirm", leadText: "先点选确认商品，再准备配图。", structured: (await snapshot(session, memory)) };
     const generated = await executeImage(product, process.env, fetch, session.id);
     if (generated.network) session.record.failure = { kind: "network", text: FAILURE_TEXT.network };
     session.record.image = {
@@ -420,7 +444,7 @@ async function runAction(body) {
     result = {
       ok: true,
       leadText: generated.capped ? generated.label : generated.network ? FAILURE_TEXT.network : generated.url ? "配图已返回，仍待核对。" : (generated.label || "没有调用生图接口。"),
-      structured: snapshot(session, memory),
+      structured: (await snapshot(session, memory)),
     };
   } else if (action === "confirm") {
     const confirmedBefore = session.record.state.confirmed_product_id;
@@ -435,8 +459,8 @@ async function runAction(body) {
         ok: false,
         error: ran.error,
         graph: graphView(ran),
-        steps: loadSteps(session.id),
-        structured: snapshot(session, memory),
+        steps: (await loadSteps(session.id)),
+        structured: (await snapshot(session, memory)),
         confirmedUnchanged: session.record.state.confirmed_product_id === confirmedBefore,
       };
     }
@@ -445,8 +469,8 @@ async function runAction(body) {
       ok: true,
       leadText: ran.reply,
       graph: graphView(ran),
-      structured: snapshot(session, memory),
-      steps: loadSteps(session.id),
+      structured: (await snapshot(session, memory)),
+      steps: (await loadSteps(session.id)),
     };
   } else if (action === "rerun-research") {
     const confirmedBefore = session.record.state.confirmed_product_id;
@@ -461,8 +485,8 @@ async function runAction(body) {
       ok: ran.ok,
       leadText: ran.capped ? ran.reply : ran.ok ? "已按当前条件重新筛选。已确认商品和已有素材都还在。" : "筛选没有完成，可以再试一次。已确认商品和已有素材都还在。",
       graph: graphView(ran),
-      structured: snapshot(session, memory),
-      steps: loadSteps(session.id),
+      structured: (await snapshot(session, memory)),
+      steps: (await loadSteps(session.id)),
       confirmedUnchanged: session.record.state.confirmed_product_id === confirmedBefore,
       materialKept: (session.record.material?.bodyText || "") === materialBefore,
     };
@@ -481,9 +505,9 @@ async function runAction(body) {
       ok: ran.ok,
       leadText: ran.capped ? ran.reply : ran.ok ? "素材已重新生成，请核对后再复制发给顾客。" : ran.error === "need_confirm" ? "先点选确认商品，再生成素材。" : ran.reply || (ran.failure === "network" ? FAILURE_TEXT.network : "素材没有生成，可以再试一次。已确认商品还在。"),
       graph: graphView(ran),
-      structured: ran.output ? { ...snapshot(session, memory), material: snapshot(session, memory).material, moments: ran.output } : snapshot(session, memory),
+      structured: ran.output ? { ...(await snapshot(session, memory)), material: (await snapshot(session, memory)).material, moments: ran.output } : (await snapshot(session, memory)),
       moments: ran.output || null,
-      steps: loadSteps(session.id),
+      steps: (await loadSteps(session.id)),
       confirmedId: session.record.state.confirmed_product_id,
       confirmedUnchanged: session.record.state.confirmed_product_id === confirmedBefore,
       candidatesUnchanged: JSON.stringify(session.record.state.candidate_ids || []) === candidatesBefore,
@@ -494,7 +518,7 @@ async function runAction(body) {
     const edited = action === "accept-probe"
       ? acceptProbe(session.record.state, revision, body.field)
       : editConstraint(session.record.state, body, revision);
-    if (!edited.ok) return { ok: false, error: edited.error, structured: snapshot(session, memory) };
+    if (!edited.ok) return { ok: false, error: edited.error, structured: (await snapshot(session, memory)) };
     const previousConfirmed = session.record.state.confirmed_product_id;
     if (session.record.material?.bodyText && previousConfirmed && !edited.state.confirmed_product_id) {
       session.record.material = {
@@ -520,8 +544,8 @@ async function runAction(body) {
       ok: true,
       leadText: lead,
       graph: graphView(ran),
-      structured: snapshot(session, memory),
-      steps: loadSteps(session.id),
+      structured: (await snapshot(session, memory)),
+      steps: (await loadSteps(session.id)),
     };
   } else {
     const text = String(body.text || "");
@@ -534,7 +558,7 @@ async function runAction(body) {
       interpretation = null;
     }
     const absorbed = absorbDemand(session.record.state, text, body.revision == null ? session.record.state.revision : Number(body.revision), interpretation);
-    if (!absorbed.ok) return { ok: false, error: absorbed.error, structured: snapshot(session, memory) };
+    if (!absorbed.ok) return { ok: false, error: absorbed.error, structured: (await snapshot(session, memory)) };
     const policyAside = isStorePolicyQuestion(text) && !hasShoppingEdit(text);
     const storeDoc = policyAside || (!absorbed.changed && isDroppedStoreQuestion(text, absorbed.state.pending_question));
     if (storeDoc) {
@@ -560,7 +584,7 @@ async function runAction(body) {
     }
     const doubt = doubtOf(text, absorbed.state.pending_question);
     if (doubt) {
-      const rounds = noteClarify(session.id, doubt);
+      const rounds = (await noteClarify(session.id, doubt));
       if (rounds > LIMITS.clarify) {
         const stopped = `${doubt}这一项仍缺，不能替你编一个数。可以改用别的条件，或点选商品。`;
         absorbed.state.pending_question = stopped;
@@ -597,14 +621,14 @@ async function runAction(body) {
     }
     if (storeDoc) {
       const answered = await answerStoreDoc(session.id, text);
-      const row = loadStep(session.id, "route");
+      const row = (await loadStep(session.id, "route"));
       if (row && answered.trace) {
-        saveStep(session.id, "route", {
+        (await saveStep(session.id, "route", {
           status: "completed",
           input: row.input,
           output: { ...(row.output || {}), retrieval: answered.trace },
           error: null,
-        });
+        }));
       }
       lead = answered.text;
     }
@@ -613,21 +637,22 @@ async function runAction(body) {
       ok: true,
       leadText: lead,
       graph: graphView(ran),
-      structured: snapshot(session, memory),
-      steps: loadSteps(session.id),
+      structured: (await snapshot(session, memory)),
+      steps: (await loadSteps(session.id)),
     };
   }
-  if (action !== "status" && action !== "load") {
-    persist(session, ["remember", "delete-memory"].includes(action) ? memory : null, action !== "sync" && action !== "reset");
+  if (action !== "status" && action !== "load" && action !== "sync") {
+    await lease?.assertOwned();
+    (await persist(session, ["remember", "delete-memory"].includes(action) ? memory : null, action !== "sync" && action !== "reset"));
   }
   return result;
 }
 
-export function guideMemoryBook() {
-  const memory = loadMemory();
+export async function guideMemoryBook() {
+  const memory = (await loadMemory());
   return {
     guideTone: guideTone(memory),
     memory: { guide: memory.guide, sessions: memory.sessions },
-    favorites: listFavorites(),
+    favorites: (await listFavorites()),
   };
 }

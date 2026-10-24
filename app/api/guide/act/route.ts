@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { guideAct, guideMemoryBook } from "@/lib/guide/session";
 
 export async function GET() {
-  return NextResponse.json(guideMemoryBook());
+  return NextResponse.json((await guideMemoryBook()));
 }
 
 export async function POST(req: Request) {

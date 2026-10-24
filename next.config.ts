@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-  serverExternalPackages: ["node:sqlite", "@langchain/langgraph", "@langchain/core"],
+  serverExternalPackages: ["node:sqlite", "@langchain/langgraph", "@langchain/core", "@libsql/client"],
   outputFileTracingIncludes: {
     "/api/guide/act": ["./data/knowledge/**/*"],
     "/api/agent/chat": ["./data/knowledge/**/*"],

@@ -99,8 +99,8 @@ function shareOf(id: string, record: Record<string, any>, updatedAt: number): Sh
   };
 }
 
-export function storeFeed() {
-  const rows = listSessionRecords() as Array<{ id: string; record: Record<string, any>; updatedAt: number }>;
+export async function storeFeed() {
+  const rows = (await listSessionRecords()) as Array<{ id: string; record: Record<string, any>; updatedAt: number }>;
   const summaries = rows
     .map((row) => summarize(row.id, row.record, row.updatedAt))
     .filter((item): item is StoreSessionSummaryItem => Boolean(item));

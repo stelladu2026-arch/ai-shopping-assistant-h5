@@ -21,7 +21,7 @@ export async function lookupStoreDoc(query) {
 }
 
 async function readStore(sessionId, query, deadlineAt) {
-  const gate = consumeCall(sessionId, "retrieve", LIMITS.retrieve);
+  const gate = (await consumeCall(sessionId, "retrieve", LIMITS.retrieve));
   if (!gate.ok) return { capped: true, hit: null };
   const hit = await retrieve(query, undefined, { deadlineAt });
   latestRetrieveTrace = retrieve.lastTrace || null;
@@ -29,9 +29,9 @@ async function readStore(sessionId, query, deadlineAt) {
 }
 
 export async function answerStoreDoc(sessionId, query, options = {}) {
-  let gate = consumeCall(sessionId, "retrieve", LIMITS.retrieve);
+  let gate = (await consumeCall(sessionId, "retrieve", LIMITS.retrieve));
   if (!gate.ok) {
-    gate = consumeCall(sessionId, "policy", LIMITS.policy);
+    gate = (await consumeCall(sessionId, "policy", LIMITS.policy));
     if (!gate.ok) return { ok: true, found: false, capped: true, text: capText("retrieve"), trace: null };
   }
   const hit = await retrieve(query, options.knowledgeDir, options);
@@ -126,12 +126,12 @@ export async function runProductDecision(session, request) {
   const deadlineAt = Date.now() + RAG_TIMEOUT_MS;
   // 点选已经列出的商品不是一次新的筛选。次数用完之后，仍可以确认当前列表里的一件。
   if (request?.intent !== "confirm") {
-    const gate = consumeCall(session.id, "product_decision", LIMITS.product_decision);
+    const gate = (await consumeCall(session.id, "product_decision", LIMITS.product_decision));
     if (!gate.ok) {
       return { ok: true, capped: true, reply: capText("product_decision") };
     }
   }
-  const previous = loadStep(session.id, STEP);
+  const previous = (await loadStep(session.id, STEP));
   const constraints = request?.constraints || session.record.state.constraints;
   if (request?.intent === "confirm") {
     const previousId = session.record.state.confirmed_product_id;
@@ -149,9 +149,9 @@ export async function runProductDecision(session, request) {
       }
       const nextId = facts?.id || settled.state.confirmed_product_id || null;
       const countedFor = session.record.pieceProductId || previousId || null;
-      if (nextId && countedFor && countedFor !== nextId) resetPieceCalls(session.id);
+      if (nextId && countedFor && countedFor !== nextId) (await resetPieceCalls(session.id));
       if (nextId) session.record.pieceProductId = nextId;
-      saveStep(session.id, STEP, {
+      (await saveStep(session.id, STEP, {
         status: "completed",
         input: { intent: "confirm", productId: request.productId, constraints: session.record.state.constraints },
         output: {
@@ -162,22 +162,22 @@ export async function runProductDecision(session, request) {
           retrieveTrace: latestRetrieveTrace,
         },
         error: null,
-      });
+      }));
       return { ok: true, reply: settled.reply, confirmedFacts: facts };
     }
 
-  saveStep(session.id, STEP, {
+  (await saveStep(session.id, STEP, {
     status: "running",
     input: { intent: request?.intent || "product_decision", constraints, productId: request?.productId || null },
     error: null,
-  });
+  }));
   if (request?.forceFail) {
-    saveStep(session.id, STEP, {
+    (await saveStep(session.id, STEP, {
       status: "failed",
       input: { intent: request?.intent || "product_decision", constraints },
       keepOutput: true,
       error: "筛选没有完成，可以再试一次。",
-    });
+    }));
     return { ok: false, error: "product_decision_failed" };
   }
   try {
@@ -212,20 +212,20 @@ export async function runProductDecision(session, request) {
       if (!plans[confirmedId]) plans[confirmedId] = confirmedFacts.promoPlan;
     }
     const output = { products: found, plans, candidateIds, confirmedFacts, retrieveTrace: latestRetrieveTrace };
-    saveStep(session.id, STEP, {
+    (await saveStep(session.id, STEP, {
       status: "completed",
       input: { intent: request?.intent || "product_decision", constraints },
       output,
       error: null,
-    });
+    }));
     return { ok: true, output };
   } catch (error) {
-    saveStep(session.id, STEP, {
+    (await saveStep(session.id, STEP, {
       status: "failed",
       input: { intent: request?.intent || "product_decision", constraints },
       keepOutput: true,
       error: "筛选没有完成，可以再试一次。",
-    });
+    }));
     return { ok: false, error: error?.message || "product_decision_failed" };
   }
 }
