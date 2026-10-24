@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 const tests = [
-  'request-deadlines', 'image-call', 'image-quota', 'image-config', 'image-set', 'edit-constraints',
+  'request-deadlines', 'session-isolation', 'image-call', 'image-quota', 'image-config', 'image-set', 'edit-constraints',
   'semantic-clauses', 'demand-clarification', 'new-copy-quota', 'reset-copy-on-product', 'blank-copy-card',
   'h5-sessions', 'guide-rules', 'model-config', 'agent-modules', 'promotion-dates',
 ];

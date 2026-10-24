@@ -1,15 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
-import { Noto_Sans_SC } from "next/font/google";
 import { DemoDeployBanner } from "@/components/demo/DemoDeployBanner";
 import "./globals.css";
-
-const notoSansSc = Noto_Sans_SC({
-  weight: ["400", "500", "600", "700"],
-  subsets: ["latin"],
-  variable: "--font-noto-sc",
-  display: "swap",
-});
 
 export const metadata: Metadata = {
   title: "AI导购助手 · 门店 H5 演示",
@@ -29,8 +21,8 @@ export default function RootLayout({
   children: ReactNode;
 }>) {
   return (
-    <html lang="zh-CN" className={notoSansSc.variable}>
-      <body className={`${notoSansSc.className} antialiased`}>
+    <html lang="zh-CN">
+      <body className="antialiased">
         <DemoDeployBanner />
         {children}
       </body>
