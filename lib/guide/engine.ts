@@ -1,6 +1,7 @@
 // @ts-nocheck
 import catalog from "../../data/catalog.json";
 import promotions from "../../data/promotions.json";
+import { materialMatches, parseMaterialDemand, materialMentions } from "./materials";
 import { clausePatch } from "./clauses";
 import { buildPromoPlan } from "./promos";
 import { FAILURE_TEXT } from "./limits";
@@ -71,9 +72,9 @@ function fitHits(item, constraints) {
   let hits = 0;
   if (constraints.color === "浅色" && LIGHT_COLORS.includes(item.color)) hits += 1;
   else if (constraints.color && constraints.color !== "浅色" && item.color === constraints.color) hits += 1;
-  if (constraints.exclude_material && item.material !== constraints.exclude_material) hits += 1;
+  if (constraints.exclude_material && !materialMatches(item.material, constraints.exclude_material)) hits += 1;
   if (constraints.style && item.style === constraints.style) hits += 1;
-  if (constraints.material && item.material === constraints.material) hits += 1;
+  if (constraints.material && materialMatches(item.material, constraints.material)) hits += 1;
   return hits;
 }
 
@@ -110,8 +111,8 @@ function matches(item, constraints, roles) {
   if (isHard(roles, "category") && constraints.category && !categoryFits(item, constraints.category)) return false;
   if (isHard(roles, "color") && constraints.color === "浅色" && !LIGHT_COLORS.includes(item.color)) return false;
   if (isHard(roles, "color") && constraints.color && constraints.color !== "浅色" && item.color !== constraints.color) return false;
-  if (isHard(roles, "exclude_material") && constraints.exclude_material && item.material === constraints.exclude_material) return false;
-  if (isHard(roles, "material") && constraints.material && item.material !== constraints.material) return false;
+  if (isHard(roles, "exclude_material") && constraints.exclude_material && materialMatches(item.material, constraints.exclude_material)) return false;
+  if (isHard(roles, "material") && constraints.material && !materialMatches(item.material, constraints.material)) return false;
   if (isHard(roles, "style") && constraints.style && item.style !== constraints.style) return false;
   return true;
 }
@@ -459,17 +460,7 @@ function parseColor(text) {
   return found;
 }
 
-function parseMaterial(text) {
-  if (/皮质也可以|可以皮质|材质不限|排除不限|不限材质|不限排除/.test(text)) return {clear: true};
-  const names = ['皮质', '布艺', '橡木', '松木', '板材', '胡桃木', '岩板'];
-  if (names.some((item) => new RegExp('(?:去掉|取消)(?:不要)?' + item).test(text) || new RegExp('不要排除' + item).test(text))) {
-    return {clear: true};
-  }
-  const excluded = ['皮质', '布艺', '橡木', '松木'].filter(item => new RegExp('不要' + item).test(text));
-  if (excluded.length > 1) return {ambiguous: excluded};
-  if (excluded.length === 1) return {value: excluded[0]};
-  return null;
-}
+function parseMaterial(text) { return parseMaterialDemand(text); }
 
 function parseStyle(text) {
   for (const style of STYLES) {
@@ -582,7 +573,7 @@ function unmatchedLookup(text) {
   for (const item of catalog) {
     if (text.includes(item.name) || text.includes(item.model)) return null;
   }
-  const rest = text
+  const rest = materialMentions(text).reduce((value, mention) => value.replace(mention.raw, ""), text)
     .replace(/书桌|办公桌|电脑桌|茶几|饭桌|餐台|桌子|最高|块钱|块|预算|上限|最多|不超过|不少于|宽度|尺寸|颜色|材质|品类|只看|改看|改为|改成|换一款|重新选|便宜点|小户型|去掉|取消|不要|排除|浅色|米白|浅灰|深绿|原木|皮质|布艺|橡木|松木|北欧|日式|现代|轻奢|简约|自然|复古|中式|沙发|餐桌|休闲椅|床架|床头柜|柜子|椅子|柜|其他|保持|不变|也可以|不限|文案|话术|发布|下单|朋友圈|确认|商品|名称|型号|不是|还是|提高|以内|直接|你自己|选好|帮我|写它|请|想买|适合|最好|优先|尽量|喜欢|偏好|可以的话|必须|一定要|只能|只要|是|色|的|元|厘米|cm|米/gi, "")
     .replace(/[零一二三四五六七八九十百千万两]/g, "")
     .replace(/[\d\s，,。；;、．.！!？?（）()]/g, "");
@@ -660,7 +651,7 @@ export function absorbDemand(state, text, clientRevision, interpretation = null)
     return {ok: true, state: next, needsResearch: false, changed, reply: next.pending_question};
   }
   if (unknownName) {
-    next.pending_question = `资料缺失。没有找到「${unknownName}」，不会编造。下一步：改用商品名称或型号，或说明预算和品类。`;
+    next.pending_question = `资料缺失。尚未识别条件「${unknownName}」，不会编造。下一步：请说明它是颜色、材质、风格，还是商品名称或型号。`;
   } else if (cheaper) {
     const current = next.constraints.budget_max_cny;
     next.pending_question = current == null
