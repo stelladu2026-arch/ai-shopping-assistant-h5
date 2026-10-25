@@ -17,7 +17,7 @@ function doubtOf(text, pending) {
   if (!pending || /^(参数错误|资料缺失|无结果|网络错误)/.test(pending)) return null;
   if (/便宜点/.test(text) || /具体预算|预算上限|自行降低/.test(pending)) return "预算";
   if (/小户型/.test(text) || /宽度上限/.test(pending)) return "宽度";
-  if (/排除的那一种材质/.test(pending)) return "材质";
+  if (/排除的那一种材质|材质条件需要确认/.test(pending)) return "材质";
   return null;
 }
 
@@ -360,7 +360,7 @@ export async function guideAct(body) {
       memoryLease = await acquireSharedLease("memories");
       if (!memoryLease) return { ok: false, error: "session_busy", leadText: "记忆正在更新，请稍后再操作。" };
     }
-    return await runAction(body, lease);
+    return await runAction(body, lease, memoryLease);
   } finally {
     await memoryLease?.release();
     await lease?.release();
@@ -368,7 +368,7 @@ export async function guideAct(body) {
   }
 }
 
-async function runAction(body, lease = null) {
+async function runAction(body, lease = null, memoryLease = null) {
   if (body.action === "lookup") return await lookupStoreDoc(body.query || body.text);
   const memory = (await loadMemory());
   const session = (await sessionFor(body.sessionId || body.customerId || body.customer_id));
@@ -643,6 +643,7 @@ async function runAction(body, lease = null) {
   }
   if (action !== "status" && action !== "load" && action !== "sync") {
     await lease?.assertOwned();
+    await memoryLease?.assertOwned();
     (await persist(session, ["remember", "delete-memory"].includes(action) ? memory : null, action !== "sync" && action !== "reset"));
   }
   return result;
