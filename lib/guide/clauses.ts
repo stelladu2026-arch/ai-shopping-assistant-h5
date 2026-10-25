@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { canonicalMaterial, knownMaterial, parseMaterialDemand } from "./materials";
 import catalog from "../../data/catalog.json";
 
 const COLORS = [...new Set(catalog.map((item) => item.color))];
@@ -110,16 +111,16 @@ export function clausePatch(text, interpretation) {
       accepted = true;
       continue;
     }
-    if (!MATERIALS.includes(raw) || !utterance.includes(raw)) {
+    if ((!MATERIALS.includes(canonicalMaterial(raw)) && !knownMaterial(raw)) || !utterance.includes(raw)) {
       pushUnique(unresolved, raw);
       continue;
     }
     if (clause.polarity === "exclude") {
-      if (!excludes.includes(raw)) excludes.push(raw);
+      if (!excludes.includes(canonicalMaterial(raw))) excludes.push(canonicalMaterial(raw));
       accepted = true;
       continue;
     }
-    materialInclude = raw;
+    materialInclude = canonicalMaterial(raw);
     marks.material = markerStrength(scope);
     accepted = true;
   }
@@ -131,7 +132,9 @@ export function clausePatch(text, interpretation) {
   else if (excludes.length === 1) material = { value: excludes[0] };
   if (materialInclude) material = { ...(material || {}), include: materialInclude };
   const consumed = [color?.value, color?.value === "原木色" ? "原木" : "", style, materialInclude, ...excludes].filter(Boolean);
-  const pending = unresolved.filter((phrase) => !consumed.some((item) => phrase === item));
+  const offline = parseMaterialDemand(utterance);
+  const handled = [...consumed, offline?.value, offline?.include, ...(offline?.ambiguous || [])].filter(Boolean);
+  const pending = unresolved.filter((phrase) => !handled.some((item) => canonicalMaterial(phrase) === item));
   return {
     color,
     style,
