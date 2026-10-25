@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {absorbDemand, createState, resolveConstraintSearch} from '../lib/guide/engine.ts';
+import {absorbDemand, createState, resolveConstraintSearch, confirmFromCatalog} from '../lib/guide/engine.ts';
 import {materialMatches, parseMaterialDemand} from '../lib/guide/materials.ts';
 const run = (text, interpretation=null) => absorbDemand(createState(),text,0,interpretation);
 for (const term of ['木质','木头','木制','木材']) {
@@ -29,3 +29,18 @@ assert.equal(unresolved.state.pending_question,null);
 assert.equal(run('实木餐桌').state.constraints.material,'实木');
 assert.equal(run('不要木质脚架的沙发').needsResearch,false);
 console.log('ok material language');
+
+const partial=run('米白布艺沙发',{clauses:[{attribute:'color',value:'米白',polarity:'include',span:'米白'}],unresolved:[]});
+assert.equal(partial.state.constraints.material,'布艺');
+assert.deepEqual(parseMaterialDemand('不要皮质但要布艺'),{value:'皮质',include:'布艺'});
+assert.ok(parseMaterialDemand('布艺或皮质都可以').ambiguous);
+assert.ok(parseMaterialDemand('不是不要皮质').ambiguous);
+const confirmed=confirmFromCatalog(createState(),'S01',0).state;
+for (const phrase of ['不要皮质和木质','预算abc元','星空紫沙发']) {
+ const changed=absorbDemand(confirmed,phrase,confirmed.revision);
+ assert.ok(changed.state.pending_question);
+ assert.equal(changed.state.confirmed_product_id,null);
+ assert.equal(changed.state.card,null);
+}
+
+assert.equal(run('沙发，不要皮质但要布艺').state.pending_question,null);

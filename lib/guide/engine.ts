@@ -549,7 +549,8 @@ function mergeMaterial(offlineMaterial, patch) {
   const material = {};
   if (offlineMaterial?.clear) material.clear = true;
   if (excludes.length === 1) material.value = excludes[0];
-  if (patch.material?.include) material.include = patch.material.include;
+  if (offlineMaterial?.include) material.include = offlineMaterial.include;
+  if (patch.material?.include && !offlineMaterial?.value && !offlineMaterial?.include) material.include = patch.material.include;
   if (!material.value && !material.include && !material.clear) return offlineMaterial;
   return material;
 }
@@ -574,7 +575,7 @@ function unmatchedLookup(text) {
     if (text.includes(item.name) || text.includes(item.model)) return null;
   }
   const rest = materialMentions(text).reduce((value, mention) => value.replace(mention.raw, ""), text)
-    .replace(/书桌|办公桌|电脑桌|茶几|饭桌|餐台|桌子|最高|块钱|块|预算|上限|最多|不超过|不少于|宽度|尺寸|颜色|材质|品类|只看|改看|改为|改成|换一款|重新选|便宜点|小户型|去掉|取消|不要|排除|浅色|米白|浅灰|深绿|原木|皮质|布艺|橡木|松木|北欧|日式|现代|轻奢|简约|自然|复古|中式|沙发|餐桌|休闲椅|床架|床头柜|柜子|椅子|柜|其他|保持|不变|也可以|不限|文案|话术|发布|下单|朋友圈|确认|商品|名称|型号|不是|还是|提高|以内|直接|你自己|选好|帮我|写它|请|想买|适合|最好|优先|尽量|喜欢|偏好|可以的话|必须|一定要|只能|只要|是|色|的|元|厘米|cm|米/gi, "")
+    .replace(/书桌|办公桌|电脑桌|茶几|饭桌|餐台|桌子|最高|块钱|块|预算|上限|最多|不超过|不少于|宽度|尺寸|颜色|材质|品类|只看|改看|改为|改成|换一款|重新选|便宜点|小户型|去掉|取消|不要|排除|不考虑|不选|拒绝|非|但要|想要|浅色|米白|浅灰|深绿|原木|皮质|布艺|橡木|松木|北欧|日式|现代|轻奢|简约|自然|复古|中式|沙发|餐桌|休闲椅|床架|床头柜|柜子|椅子|柜|其他|保持|不变|也可以|不限|文案|话术|发布|下单|朋友圈|确认|商品|名称|型号|不是|还是|提高|以内|直接|你自己|选好|帮我|写它|请|想买|适合|最好|优先|尽量|喜欢|偏好|可以的话|必须|一定要|只能|只要|是|色|的|元|厘米|cm|米/gi, "")
     .replace(/[零一二三四五六七八九十百千万两]/g, "")
     .replace(/[\d\s，,。；;、．.！!？?（）()]/g, "");
   return rest.length >= 2 ? rest.slice(0, 16) : null;
@@ -637,6 +638,7 @@ export function absorbDemand(state, text, clientRevision, interpretation = null)
   }
   if (badParams(text, {budget, width, cheaper, smallHome})) {
     next.pending_question = FAILURE_TEXT.bad_params;
+    clearConfirmed(next);
     next.candidate_ids = [];
     next.revision += 1;
     return {ok: true, state: next, needsResearch: false, changed, reply: next.pending_question};
@@ -645,12 +647,14 @@ export function absorbDemand(state, text, clientRevision, interpretation = null)
     ? (read.interpreted ? ((read.unresolved || []).find((item) => item && !/^(去掉|取消|不限|改成|改为|其他|保持)$/.test(item)) || null) : unmatchedLookup(text))
     : null;
   if (material?.ambiguous) {
-    next.pending_question = '还缺要排除的那一种材质。下一步：只回复一种，例如不要皮质。当前不能同时排除两种。';
+    clearConfirmed(next);
+    next.pending_question = '材质条件需要确认。下一步：请选择一种要保留或排除的材质，或回复材质不限。';
     next.candidate_ids = [];
     next.revision += 1;
     return {ok: true, state: next, needsResearch: false, changed, reply: next.pending_question};
   }
   if (unknownName) {
+    clearConfirmed(next);
     next.pending_question = `资料缺失。尚未识别条件「${unknownName}」，不会编造。下一步：请说明它是颜色、材质、风格，还是商品名称或型号。`;
   } else if (cheaper) {
     const current = next.constraints.budget_max_cny;
@@ -739,7 +743,8 @@ export function applyTurn(state, text, clientRevision, interpretation = null) {
   }
 
   if (material?.ambiguous) {
-    next.pending_question = '当前只能排除一种材质，请指定要排除的那一种。';
+    clearConfirmed(next);
+    next.pending_question = '材质条件需要确认，请选择一种要保留或排除的材质，或回复材质不限。';
     next.candidate_ids = [];
     next.card = null;
     next.revision += 1;

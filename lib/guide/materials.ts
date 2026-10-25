@@ -13,11 +13,16 @@ export function materialMentions(text) {
 export function parseMaterialDemand(text) {
   if (/皮质也可以|可以皮质|材质不限|排除不限|不限材质|不限排除/.test(text)) return {clear:true};
   const excludes = [], includes = [];
+  const mentions = materialMentions(text);
+  if (mentions.length && /不是不要|并非不要|并不是不|不能不/.test(text)) return {ambiguous: mentions.map(m=>m.value)};
+  if (mentions.length > 1 && /或者|或|都可以|均可|都行/.test(text)) return {ambiguous: mentions.map(m=>m.value)};
   for (const part of String(text).split(/[、，,。；;\n]/)) {
     for (const mention of materialMentions(part)) {
       const prefix = part.slice(0,mention.index);
       if (/(?:去掉|取消)(?:不要|排除)?$|不要排除$/.test(prefix)) return {clear:true};
-      const list = /不要|排除|不选|不考虑|拒绝|非/.test(prefix) ? excludes : includes;
+      const markers = [...prefix.matchAll(/不要|排除|不选|不考虑|拒绝|非|想要|要|选择|选/g)];
+      const last = markers[markers.length-1]?.[0] || '';
+      const list = ['不要','排除','不选','不考虑','拒绝','非'].includes(last) ? excludes : includes;
       if (!list.includes(mention.value)) list.push(mention.value);
     }
   }
