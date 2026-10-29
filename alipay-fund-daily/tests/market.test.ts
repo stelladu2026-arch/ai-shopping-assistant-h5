@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { fetchHistory } from "../bot/lib/market.ts";
+import { fetchHistory, preferLargerShareClass, shareClassKey } from "../bot/lib/market.ts";
 
 function dateAt(index: number): string {
   return new Date(Date.UTC(2020, 0, 1) + index * 86_400_000).toISOString().slice(0, 10);
@@ -19,6 +19,19 @@ function page(start: number, count: number) {
   }
   return { ErrCode: 0, Data: { LSJZList: rows } };
 }
+
+test("larger share class is kept once when the list is size-sorted", () => {
+  const picked = preferLargerShareClass(
+    [
+      { name: "招商中证白酒指数(LOF)A", code: "161725" },
+      { name: "招商中证白酒指数(LOF)C", code: "012414" },
+      { name: "易方达沪深300ETF联接A", code: "110020" },
+    ],
+    16,
+  );
+  assert.deepEqual(picked.map((fund) => fund.code), ["161725", "110020"]);
+  assert.equal(shareClassKey("招商中证白酒指数(LOF)A"), shareClassKey("招商中证白酒指数(LOF)C"));
+});
 
 test("history keeps paging while each page is full", async () => {
   let calls = 0;

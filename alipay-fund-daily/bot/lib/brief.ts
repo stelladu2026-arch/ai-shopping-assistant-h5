@@ -1,4 +1,5 @@
-import { fetchHistory, fetchProfile } from "./market.ts";
+import { fetchHistory, fetchProfile, type FundProfile } from "./market.ts";
+import type { NavPoint } from "./signal.ts";
 import {
   cutoffAt,
   decide,
@@ -10,7 +11,9 @@ import {
 } from "./signal.ts";
 
 export const WATCHLIST_KEY = "operator-watchlist";
+export const HOLDINGS_KEY = "operator-holdings";
 export const MAX_FUNDS = 8;
+export const SCREEN_PAGES = 14;
 
 export type FundBrief = {
   ok: true;
@@ -66,29 +69,19 @@ export function normalizeCodes(codes: string[]): string[] {
   return unique;
 }
 
-export async function buildDailyBrief(codes: string[], now = new Date()): Promise<DailyBrief> {
-  const funds: FundBrief[] = [];
-  for (const code of codes) {
-    funds.push(await buildOne(code));
-  }
-  return {
-    disclaimer: DISCLAIMER,
-    cutoff: cutoffAt(now),
-    goal: {
-      annualReturnPct: 20,
-      meaning: "对照目标，不是预期，也不是承诺。",
-    },
-    watchlistEmpty: codes.length === 0,
-    funds,
-  };
-}
+export type FundStudy =
+  | { ok: false; code: string; error: string }
+  | { ok: true; brief: Extract<FundBrief, { ok: true }>; points: NavPoint[] };
 
-async function buildOne(code: string): Promise<FundBrief> {
+export async function analyzeFund(
+  code: string,
+  options: { maxPages?: number; profile?: FundProfile } = {},
+): Promise<FundStudy> {
   try {
-    const profile = await fetchProfile(code);
+    const profile = options.profile ?? (await fetchProfile(code));
     const kind = profile?.kind ?? "unknown";
     const history = await fetchHistory(code, {
-      maxPages: kind === "cash" || kind === "other" ? 1 : undefined,
+      maxPages: kind === "cash" || kind === "other" ? 1 : options.maxPages,
     });
     const { decision, backtest } = decide({
       points: history.points,
@@ -105,19 +98,23 @@ async function buildOne(code: string): Promise<FundBrief> {
         : Math.round((latest.nav / previous.nav - 1) * 1000) / 10;
     return {
       ok: true,
-      code,
-      name: profile?.name ?? null,
-      ftype: profile?.ftype ?? null,
-      kind,
-      latestDate: latest.date,
-      latestNav: moneyMarket ? null : latest.nav,
-      dailyChangePct,
-      tenThousandYield: moneyMarket ? latest.nav : null,
-      sevenDayAnnualizedPct: moneyMarket ? history.latestAccumulated : null,
-      subscribeStatus: history.subscribeStatus,
-      redeemStatus: history.redeemStatus,
-      decision,
-      backtest,
+      points: history.points,
+      brief: {
+        ok: true,
+        code,
+        name: profile?.name ?? null,
+        ftype: profile?.ftype ?? null,
+        kind,
+        latestDate: latest.date,
+        latestNav: moneyMarket ? null : latest.nav,
+        dailyChangePct,
+        tenThousandYield: moneyMarket ? latest.nav : null,
+        sevenDayAnnualizedPct: moneyMarket ? history.latestAccumulated : null,
+        subscribeStatus: history.subscribeStatus,
+        redeemStatus: history.redeemStatus,
+        decision,
+        backtest,
+      },
     };
   } catch (error) {
     return {
@@ -126,6 +123,24 @@ async function buildOne(code: string): Promise<FundBrief> {
       error: error instanceof Error ? error.message : "这只基金暂时查不到。",
     };
   }
+}
+
+export async function buildDailyBrief(codes: string[], now = new Date()): Promise<DailyBrief> {
+  const funds: FundBrief[] = [];
+  for (const code of codes) {
+    const study = await analyzeFund(code);
+    funds.push(study.ok ? study.brief : study);
+  }
+  return {
+    disclaimer: DISCLAIMER,
+    cutoff: cutoffAt(now),
+    goal: {
+      annualReturnPct: 20,
+      meaning: "对照目标，不是预期，也不是承诺。",
+    },
+    watchlistEmpty: codes.length === 0,
+    funds,
+  };
 }
 
 export function sameCodes(left: string[], right: string[]): boolean {

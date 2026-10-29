@@ -153,6 +153,95 @@ export function decide(input: {
   return { decision, backtest: runBacktest(points, input.kind) };
 }
 
+export type SellWatch = {
+  triggered: boolean;
+  sellDay: string | null;
+  latestNav: number | null;
+  ma60: number | null;
+  ma120: number | null;
+  high120: number | null;
+  sellNav: number | null;
+  dropToSellNavPct: number | null;
+  belowBothAverages: boolean;
+  submitNote: string;
+};
+
+const SELL_DRAWDOWN = 0.15;
+
+export function sellWatch(input: {
+  points: NavPoint[];
+  kind: FundKind;
+  now: Date;
+  redeemStatus?: string | null;
+}): SellWatch {
+  const cutoff = cutoffAt(input.now);
+  const day = cutoff.shanghaiTime.slice(0, 10);
+  const points = input.points.filter((point) => point.nav > 0);
+  const navs = points.map((point) => point.nav);
+  const last = navs.length - 1;
+  if (input.kind !== "equity") {
+    return blankSellWatch("货币、债券、商品、黄金和 REIT 不设这套卖出日。");
+  }
+  if (last < SLOW - 1) {
+    return blankSellWatch("公布净值不足 120 个交易日，定不出卖出日。");
+  }
+
+  const nav = navs[last];
+  const ma60 = average(navs, last, MID);
+  const ma120 = average(navs, last, SLOW);
+  const high120 = highest(navs, last - SLOW + 1, last);
+  const sellNav = high120 * (1 - SELL_DRAWDOWN);
+  const belowBothAverages = ma60 !== null && ma120 !== null && nav < ma60 && nav < ma120;
+  const technical = stanceAt(navs, last, input.kind);
+  const triggered = technical === "reduce";
+  const redeemPaused = /暂停|封闭/.test(input.redeemStatus ?? "");
+  const dropToSellNavPct = round1(((nav - sellNav) / nav) * 100);
+  const levels =
+    `15% 回撤卖出价约 ${roundNav(sellNav)}（近 120 日高点 ${roundNav(high120)}）。` +
+    `另一条是净值同时低于 60 日均线 ${ma60 === null ? "没有" : roundNav(ma60)} 和 120 日均线 ${ma120 === null ? "没有" : roundNav(ma120)}。`;
+
+  let submitNote: string;
+  if (!triggered) {
+    submitNote =
+      `卖出日还没到。${levels}还要再跌约 ${Math.max(dropToSellNavPct, 0).toFixed(1)}% 才到 15% 卖出价。` +
+      "两条里任何一条成立的那个交易日才是卖出日，不能提前写成未来的某一天。每个交易日北京时间 14:00 会再检查。";
+  } else if (redeemPaused) {
+    submitNote = `卖出条件在 ${day} 已经成立，但赎回状态是「${input.redeemStatus}」，支付宝里可能赎不回来。${levels}${cutoff.note}`;
+  } else if (cutoff.weekend || cutoff.pastCutoff) {
+    submitNote = `卖出日就是 ${day}，条件已经成立。${cutoff.note}${levels}`;
+  } else {
+    submitNote = `卖出日就是 ${day}。北京时间 15:00 前在支付宝自行赎回，通常按今天净值确认。${levels}`;
+  }
+
+  return {
+    triggered,
+    sellDay: triggered ? day : null,
+    latestNav: roundNav(nav),
+    ma60: ma60 === null ? null : roundNav(ma60),
+    ma120: ma120 === null ? null : roundNav(ma120),
+    high120: roundNav(high120),
+    sellNav: roundNav(sellNav),
+    dropToSellNavPct,
+    belowBothAverages,
+    submitNote,
+  };
+}
+
+function blankSellWatch(submitNote: string): SellWatch {
+  return {
+    triggered: false,
+    sellDay: null,
+    latestNav: null,
+    ma60: null,
+    ma120: null,
+    high120: null,
+    sellNav: null,
+    dropToSellNavPct: null,
+    belowBothAverages: false,
+    submitNote,
+  };
+}
+
 export function stanceAt(navs: number[], index: number, kind: FundKind): Action {
   if (kind === "cash" || kind === "bond" || kind === "other") return "unsuitable";
   if (kind === "unknown") return "wait";

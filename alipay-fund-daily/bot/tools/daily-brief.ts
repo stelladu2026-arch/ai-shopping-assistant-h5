@@ -17,7 +17,7 @@ export default defineTool({
     if (selected.length === 0) {
       return {
         ...brief,
-        message: "观察名单是空的。请发送最多 8 个 6 位基金代码，并说明要加入观察名单。这里不推荐具体基金。",
+        message: "观察名单是空的。问现在可以买什么，用入手筛选。问卖出日，需要先记录已经买入的代码。不要从空名单里编基金。",
       };
     }
     return brief;

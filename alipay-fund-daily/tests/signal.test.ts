@@ -5,6 +5,7 @@ import {
   cutoffAt,
   decide,
   redemptionFeeRate,
+  sellWatch,
   type NavPoint,
 } from "../bot/lib/signal.ts";
 
@@ -97,6 +98,43 @@ test("a paused subscription turns a buy reference into no action today", () => {
   });
   assert.equal(result.decision.action, "wait");
   assert.match(result.decision.reasons.join(""), /暂停申购/);
+});
+
+test("a broken trend makes today the sell day before the 15:00 cutoff", () => {
+  const navs = [...Array(180).fill(1), ...Array.from({ length: 30 }, (_, index) => 0.985 ** (index + 1))];
+  const watch = sellWatch({
+    points: points(navs),
+    kind: "equity",
+    now: new Date("2026-10-29T06:00:00Z"),
+  });
+  assert.equal(watch.triggered, true);
+  assert.equal(watch.sellDay, "2026-10-29");
+  assert.match(watch.submitNote, /15:00 前/);
+  assert.ok((watch.sellNav ?? 0) > 0);
+});
+
+test("an intact trend has no sell day and does not invent one", () => {
+  const watch = sellWatch({
+    points: points(climb(260, 0.0004)),
+    kind: "equity",
+    now: new Date("2026-10-29T06:00:00Z"),
+  });
+  assert.equal(watch.triggered, false);
+  assert.equal(watch.sellDay, null);
+  assert.ok((watch.dropToSellNavPct ?? 0) > 0);
+  assert.match(watch.submitNote, /卖出日还没到/);
+  assert.match(watch.submitNote, /不能提前写成未来的某一天/);
+});
+
+test("a sell signal after 15:00 still names today but uses the next net value", () => {
+  const navs = [...Array(180).fill(1), ...Array.from({ length: 30 }, (_, index) => 0.985 ** (index + 1))];
+  const watch = sellWatch({
+    points: points(navs),
+    kind: "equity",
+    now: new Date("2026-10-29T08:00:00Z"),
+  });
+  assert.equal(watch.sellDay, "2026-10-29");
+  assert.match(watch.submitNote, /已过 15:00/);
 });
 
 test("holding under seven days uses the higher redemption fee", () => {

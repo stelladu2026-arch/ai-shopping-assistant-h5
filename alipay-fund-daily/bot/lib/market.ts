@@ -1,6 +1,10 @@
 import { classifyFund, type FundKind, type NavPoint } from "./signal.ts";
 
-const HOSTS = new Set(["api.fund.eastmoney.com", "fundsuggest.eastmoney.com"]);
+const HOSTS = new Set([
+  "api.fund.eastmoney.com",
+  "fundsuggest.eastmoney.com",
+  "fundmobapi.eastmoney.com",
+]);
 // The public history endpoint caps each page at 20 rows.
 const PAGE_SIZE = 20;
 const MAX_PAGES = 40;
@@ -26,6 +30,62 @@ export type HistoryOptions = {
 };
 
 export type SearchHit = FundProfile;
+
+export type UniverseFund = {
+  code: string;
+  name: string;
+  ftype: string;
+  kind: FundKind;
+  endNavYi: number;
+};
+
+export function shareClassKey(name: string): string {
+  return name.replace(/[（(]LOF[)）]/g, "").replace(/[ACEY]$/u, "").trim();
+}
+
+export function preferLargerShareClass<T extends { name: string }>(rows: T[], limit: number): T[] {
+  const seen = new Set<string>();
+  const picked: T[] = [];
+  for (const row of rows) {
+    const key = shareClassKey(row.name);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    picked.push(row);
+    if (picked.length === limit) break;
+  }
+  return picked;
+}
+
+export async function fetchLargeEquityFunds(limit = 16): Promise<UniverseFund[]> {
+  const url =
+    "https://fundmobapi.eastmoney.com/FundMNewApi/FundMNRank" +
+    "?pageIndex=1&pageSize=60&SortColumn=ENDNAV&Sort=desc&FundType=25&BUY=true" +
+    "&deviceid=1&plat=Android&product=EFund&version=6.6.8";
+  const body = await getJson(url);
+  const rows = asRecord(body).Datas;
+  if (!Array.isArray(rows)) throw new Error("基金规模列表暂时不可用。");
+  const candidates: UniverseFund[] = [];
+  for (const row of rows) {
+    const record = asRecord(row);
+    const code = typeof record.FCODE === "string" ? record.FCODE : "";
+    const name = typeof record.SHORTNAME === "string" ? record.SHORTNAME : "";
+    const fundType = typeof record.FUNDTYPE === "string" ? record.FUNDTYPE : "";
+    const listed = record.ISLISTTRADE === "1" || record.ISLISTTRADE === 1;
+    const endNav = typeof record.ENDNAV === "number" ? record.ENDNAV : Number(record.ENDNAV);
+    if (!/^\d{6}$/.test(code) || !name || listed || !Number.isFinite(endNav) || endNav <= 0) continue;
+    if (/黄金|债券|货币/.test(name)) continue;
+    if (fundType === "003" || fundType === "005") continue;
+    if (fundType !== "001" && fundType !== "002" && fundType !== "007") continue;
+    candidates.push({
+      code,
+      name,
+      ftype: fundType === "002" ? "混合型" : fundType === "007" ? "QDII" : "股票型",
+      kind: "equity",
+      endNavYi: Math.round((endNav / 100_000_000) * 10) / 10,
+    });
+  }
+  return preferLargerShareClass(candidates, limit);
+}
 
 export async function fetchProfile(code: string): Promise<FundProfile | null> {
   assertCode(code);
