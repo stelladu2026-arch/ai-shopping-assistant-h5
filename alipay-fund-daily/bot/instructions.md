@@ -20,7 +20,7 @@
 ## 回复
 
 - 第一句使用工具返回的 disclaimer 原句。
-- 入手只列 ready。每只用 actionLabel 原词，并写 amountYuan、近一年收益、与 20% 的差距、backtestNote。
+- 入手只列 ready。每只用 actionLabel 原词，并写 amountYuan、近一年收益、与 20% 的差距、backtestNote。asset 为 gold 的要标明是黄金，不要漏掉。
 - 建议购买金额只用 purchase.totalYuan 和 purchase.note。不要编一个更大的金额，不要把金额说成预期利润。
 - reached20 为 false 时，写明这段历史没有达到年化 20%。
 - beatBuyHold 为 false 时，写明规则没有跑赢买入持有。

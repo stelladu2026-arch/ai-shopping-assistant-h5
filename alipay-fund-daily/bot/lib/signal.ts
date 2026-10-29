@@ -1,6 +1,6 @@
 // Deterministic fund stance. Numbers stay here so the model cannot invent a return.
 
-export type FundKind = "cash" | "bond" | "equity" | "other" | "unknown";
+export type FundKind = "cash" | "bond" | "equity" | "gold" | "other" | "unknown";
 
 export type Action =
   | "unsuitable"
@@ -76,12 +76,13 @@ export function redemptionFeeRate(heldDays: number): number {
   return heldDays < SHORT_HOLD_DAYS ? SHORT_HOLD_FEE : ENTRY_COST;
 }
 
-export function classifyFund(ftype: string | null | undefined): FundKind {
-  const text = ftype?.trim() ?? "";
+export function classifyFund(ftype: string | null | undefined, name?: string | null): FundKind {
+  const text = `${ftype ?? ""} ${name ?? ""}`.trim();
   if (!text) return "unknown";
   if (text.includes("货币")) return "cash";
   if (/债券|纯债|短债|理财/.test(text)) return "bond";
-  if (/REIT|Reit|reit|商品|黄金/.test(text)) return "other";
+  if (text.includes("黄金")) return "gold";
+  if (/REIT|Reit|reit|商品/.test(text)) return "other";
   if (/股票|混合|指数|QDII|FOF|联接|海外/.test(text)) return "equity";
   return "unknown";
 }
@@ -179,8 +180,8 @@ export function sellWatch(input: {
   const points = input.points.filter((point) => point.nav > 0);
   const navs = points.map((point) => point.nav);
   const last = navs.length - 1;
-  if (input.kind !== "equity") {
-    return blankSellWatch("货币、债券、商品、黄金和 REIT 不设这套卖出日。");
+  if (input.kind !== "equity" && input.kind !== "gold") {
+    return blankSellWatch("货币、债券、商品和 REIT 不设这套卖出日。");
   }
   if (last < SLOW - 1) {
     return blankSellWatch("公布净值不足 120 个交易日，定不出卖出日。");
@@ -244,6 +245,7 @@ function blankSellWatch(submitNote: string): SellWatch {
 
 export function stanceAt(navs: number[], index: number, kind: FundKind): Action {
   if (kind === "cash" || kind === "bond" || kind === "other") return "unsuitable";
+  // Gold uses the same trend rules as equity. The reason text says it is not a 20% product.
   if (kind === "unknown") return "wait";
   if (index < SLOW - 1 || index >= navs.length) return "insufficient";
 
@@ -302,7 +304,7 @@ function reasonsFor(
   if (action === "unsuitable") {
     reasons.push(
       kind === "other"
-        ? "商品、黄金或 REIT 类产品不是用来博年化 20% 的。"
+        ? "商品或 REIT 类产品不是用来博年化 20% 的。"
         : "货币基金和债券基金的收益结构和年化 20% 对不上，交易规则改变不了这一点。",
     );
   } else if (action === "insufficient") {
@@ -336,6 +338,9 @@ function reasonsFor(
     reasons.push(
       `近一年收益 ${formatPct(metrics.trailing1yPct)}，与年化 20% 对照目标相差 ${metrics.gapTo20PctPoints.toFixed(1)} 个百分点。`,
     );
+  }
+  if (kind === "gold") {
+    reasons.push("这是黄金基金，净值跟着黄金价格走。可以对照买卖，但不能把它当成稳定达到年化 20% 的产品。");
   }
   if (extra) reasons.push(extra);
   return reasons;
@@ -398,7 +403,7 @@ function runBacktest(points: NavPoint[], kind: FundKind): Backtest {
   const empty = emptyBacktest;
 
   if (kind === "bond" || kind === "other") {
-    return empty("债券、商品、黄金和 REIT 不跑这套买卖规则。");
+    return empty("债券、商品和 REIT 不跑这套买卖规则。");
   }
   if (kind === "unknown") {
     return empty("类型不明，不做历史买卖对照。");

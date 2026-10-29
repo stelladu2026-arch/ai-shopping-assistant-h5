@@ -1,5 +1,5 @@
 import { analyzeFund, SCREEN_PAGES } from "./brief.ts";
-import { fetchLargeEquityFunds, type FundProfile, type UniverseFund } from "./market.ts";
+import { fetchLargeEquityFunds, fetchLargeGoldFunds, type FundProfile, type UniverseFund } from "./market.ts";
 import { allocatePurchase, type PurchasePlan } from "./sizing.ts";
 import { cutoffAt, DISCLAIMER, sellWatch, type Cutoff } from "./signal.ts";
 
@@ -20,6 +20,7 @@ export type BuyCandidate = {
   beatBuyHold: boolean | null;
   backtestNote: string;
   amountYuan: number | null;
+  asset: "equity" | "gold";
 };
 
 export type HeldSell = {
@@ -28,6 +29,7 @@ export type HeldSell = {
   actionLabel: string;
   sellDay: string | null;
   submitNote: string;
+  asset: "equity" | "gold";
 };
 
 export type EntryScreen = {
@@ -59,7 +61,11 @@ export type HoldingReview = {
 };
 
 export async function screenEntries(now = new Date(), capitalYuan: number | null = null): Promise<EntryScreen> {
-  const universe = await fetchLargeEquityFunds(SCREEN_LIMIT);
+  const [equity, gold] = await Promise.all([
+    fetchLargeEquityFunds(SCREEN_LIMIT),
+    fetchLargeGoldFunds(4),
+  ]);
+  const universe = [...equity, ...gold];
   const studies = await mapPool(universe, SCREEN_CONCURRENCY, async (fund) => ({
     fund,
     study: await analyzeFund(fund.code, { maxPages: SCREEN_PAGES, profile: asProfile(fund) }),
@@ -88,6 +94,7 @@ export async function screenEntries(now = new Date(), capitalYuan: number | null
         beatBuyHold: brief.backtest.beatBuyHold,
         backtestNote: brief.backtest.note,
         amountYuan: null,
+        asset: item.fund.kind === "gold" ? "gold" : "equity",
       });
     }
     if (brief.decision.action === "reduce") {
@@ -103,6 +110,7 @@ export async function screenEntries(now = new Date(), capitalYuan: number | null
         actionLabel: brief.decision.actionLabel,
         sellDay: watch.sellDay,
         submitNote: watch.submitNote,
+        asset: item.fund.kind === "gold" ? "gold" : "equity",
       });
     }
   }

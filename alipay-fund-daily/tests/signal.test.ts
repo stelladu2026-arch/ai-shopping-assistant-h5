@@ -31,6 +31,8 @@ test("classifies cash, bond, and equity from the public type name", () => {
   assert.equal(classifyFund("指数型-股票"), "equity");
   assert.equal(classifyFund("混合型-灵活"), "equity");
   assert.equal(classifyFund("商品型"), "other");
+  assert.equal(classifyFund("黄金ETF联接"), "gold");
+  assert.equal(classifyFund("指数型-其他", "华安黄金ETF联接C"), "gold");
   assert.equal(classifyFund(""), "unknown");
 });
 
@@ -47,6 +49,20 @@ test("a bond fund is unsuitable for a 20% goal even in an uptrend", () => {
   assert.equal(result.decision.actionLabel, "不适合该目标");
   assert.equal(result.backtest.sampleEnough, false);
   assert.equal(result.backtest.reached20, false);
+});
+
+test("a gold fund can be held or sold instead of being refused", () => {
+  const held = decide({ points: points(climb(180, 0.0004)), kind: "gold" });
+  assert.equal(held.decision.action, "hold");
+  assert.match(held.decision.reasons.join(""), /黄金基金/);
+  const navs = [...Array(180).fill(1), ...Array.from({ length: 30 }, (_, index) => 0.985 ** (index + 1))];
+  const sell = sellWatch({
+    points: points(navs),
+    kind: "gold",
+    now: new Date("2026-10-29T06:00:00Z"),
+  });
+  assert.equal(sell.triggered, true);
+  assert.equal(sell.sellDay, "2026-10-29");
 });
 
 test("unknown type does not produce a buy or sell label", () => {

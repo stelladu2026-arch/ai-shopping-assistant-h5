@@ -87,6 +87,34 @@ export async function fetchLargeEquityFunds(limit = 16): Promise<UniverseFund[]>
   return preferLargerShareClass(candidates, limit);
 }
 
+export async function fetchLargeGoldFunds(limit = 4): Promise<UniverseFund[]> {
+  const url =
+    "https://fundmobapi.eastmoney.com/FundMNewApi/FundMNRank" +
+    "?pageIndex=1&pageSize=30&SortColumn=ENDNAV&Sort=desc&FundType=27&BUY=true" +
+    "&deviceid=1&plat=Android&product=EFund&version=6.6.8";
+  const body = await getJson(url);
+  const rows = asRecord(body).Datas;
+  if (!Array.isArray(rows)) throw new Error("黄金基金列表暂时不可用。");
+  const candidates: UniverseFund[] = [];
+  for (const row of rows) {
+    const record = asRecord(row);
+    const code = typeof record.FCODE === "string" ? record.FCODE : "";
+    const name = typeof record.SHORTNAME === "string" ? record.SHORTNAME : "";
+    const listed = record.ISLISTTRADE === "1" || record.ISLISTTRADE === 1;
+    const endNav = typeof record.ENDNAV === "number" ? record.ENDNAV : Number(record.ENDNAV);
+    if (!/^\d{6}$/.test(code) || !name.includes("黄金") || listed) continue;
+    if (!Number.isFinite(endNav) || endNav <= 0) continue;
+    candidates.push({
+      code,
+      name,
+      ftype: "黄金",
+      kind: "gold",
+      endNavYi: Math.round((endNav / 100_000_000) * 10) / 10,
+    });
+  }
+  return preferLargerShareClass(candidates, limit);
+}
+
 export async function fetchProfile(code: string): Promise<FundProfile | null> {
   assertCode(code);
   const hits = await searchFunds(code);
@@ -111,7 +139,7 @@ export async function searchFunds(query: string): Promise<SearchHit[]> {
     const info = asRecord(record.FundBaseInfo);
     const ftype = typeof info.FTYPE === "string" ? info.FTYPE : "";
     if (!/^\d{6}$/.test(code) || !name) continue;
-    hits.push({ code, name, ftype, kind: classifyFund(ftype) });
+    hits.push({ code, name, ftype, kind: classifyFund(ftype, name) });
     if (hits.length === 5) break;
   }
   return hits;
