@@ -1,5 +1,6 @@
 import { analyzeFund, SCREEN_PAGES } from "./brief.ts";
 import { fetchLargeEquityFunds, type FundProfile, type UniverseFund } from "./market.ts";
+import { allocatePurchase, type PurchasePlan } from "./sizing.ts";
 import { cutoffAt, DISCLAIMER, sellWatch, type Cutoff } from "./signal.ts";
 
 const SCREEN_LIMIT = 16;
@@ -18,6 +19,7 @@ export type BuyCandidate = {
   reached20: boolean;
   beatBuyHold: boolean | null;
   backtestNote: string;
+  amountYuan: number | null;
 };
 
 export type HeldSell = {
@@ -35,6 +37,7 @@ export type EntryScreen = {
   failed: number;
   ready: BuyCandidate[];
   ifHeldSellToday: HeldSell[];
+  purchase: PurchasePlan;
   message: string;
 };
 
@@ -55,7 +58,7 @@ export type HoldingReview = {
   submitNote: string;
 };
 
-export async function screenEntries(now = new Date()): Promise<EntryScreen> {
+export async function screenEntries(now = new Date(), capitalYuan: number | null = null): Promise<EntryScreen> {
   const universe = await fetchLargeEquityFunds(SCREEN_LIMIT);
   const studies = await mapPool(universe, SCREEN_CONCURRENCY, async (fund) => ({
     fund,
@@ -84,6 +87,7 @@ export async function screenEntries(now = new Date()): Promise<EntryScreen> {
         reached20: brief.backtest.reached20,
         beatBuyHold: brief.backtest.beatBuyHold,
         backtestNote: brief.backtest.note,
+        amountYuan: null,
       });
     }
     if (brief.decision.action === "reduce") {
@@ -102,6 +106,12 @@ export async function screenEntries(now = new Date()): Promise<EntryScreen> {
       });
     }
   }
+  const purchase = allocatePurchase(capitalYuan, ready.length);
+  for (const fund of ready) fund.amountYuan = purchase.amountEachYuan;
+  const selection =
+    ready.length === 0
+      ? "今天这批规模靠前、且可购买的股票和指数基金里，没有同时满足入手条件的。不要另外编一只基金。"
+      : "ready 里的基金是今天可以分批入手的对照。这不是保证赚到年化 20%。历史没有达到 20% 的，必须照实说。";
   return {
     disclaimer: DISCLAIMER,
     cutoff: cutoffAt(now),
@@ -109,10 +119,8 @@ export async function screenEntries(now = new Date()): Promise<EntryScreen> {
     failed,
     ready,
     ifHeldSellToday,
-    message:
-      ready.length === 0
-        ? "今天这批规模靠前、且可购买的股票和指数基金里，没有同时满足入手条件的。不要另外编一只基金。"
-        : "ready 里的基金是今天可以分批入手的对照。这不是保证赚到年化 20%。历史没有达到 20% 的，必须照实说。",
+    purchase,
+    message: `${selection}${purchase.note}`,
   };
 }
 

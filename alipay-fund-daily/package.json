@@ -5,7 +5,7 @@
   "description": "agent project: alipay-fund-daily",
   "scripts": {
     "check": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test tests/signal.test.ts tests/market.test.ts",
+    "test": "node --experimental-strip-types --test tests/signal.test.ts tests/market.test.ts tests/sizing.test.ts",
     "dev": "agent-sdk dev"
   },
   "dependencies": {
