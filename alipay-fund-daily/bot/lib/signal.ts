@@ -204,7 +204,7 @@ export function sellWatch(input: {
   if (!triggered) {
     submitNote =
       `卖出日还没到。${levels}还要再跌约 ${Math.max(dropToSellNavPct, 0).toFixed(1)}% 才到 15% 卖出价。` +
-      "两条里任何一条成立的那个交易日才是卖出日，不能提前写成未来的某一天。每个交易日北京时间 14:00 会再检查。";
+      "两条里任何一条成立的那个交易日才是卖出日，不能提前写成未来的某一天。每个交易日北京时间 14:30 会再检查。";
   } else if (redeemPaused) {
     submitNote = `卖出条件在 ${day} 已经成立，但赎回状态是「${input.redeemStatus}」，支付宝里可能赎不回来。${levels}${cutoff.note}`;
   } else if (cutoff.weekend || cutoff.pastCutoff) {

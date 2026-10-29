@@ -1,10 +1,12 @@
 ---
-cron: "0 6 * * 1-5"
+cron: "30 6 * * *"
 ---
 
-现在是北京时间 14:00，交易日 15:00 截止之前。先调用 screen-buys，再调用 sell-check。
-不要修改持仓，不要索要支付宝密码、支付密码、短信验证码或 Cookie。
-回复以 disclaimer 原句开头。
-第一节只列 ready 里的基金，作为今天可以分批入手的对照，并写每只的 amountYuan 和 purchase.note。ready 为空就写今天没有，建议购买金额是 0 元。
-第二节写已记录持仓：triggered 为 true 时用 sellDay 作为卖出日；为 false 时写明卖出日还没到，并引用 submitNote。持仓为空就说明需要先提供已买入的 6 位代码。
-不要编造未来的卖出日期。reached20 为 false 时写明这段历史没有达到年化 20%。
+现在是北京时间 14:30，赶在支付宝基金 15:00 截止之前。先调用 screen-buys，再调用 sell-check。
+不要修改持仓或可投入金额，不要索要支付宝密码、支付密码、短信验证码或 Cookie。
+回复以 disclaimer 原句开头，并且只分两节：
+
+适合买入：只列 ready。每只写名称、代码和 amountYuan，并写 purchase.note 里的合计。ready 为空就写今天没有适合买入的，建议购买金额是 0 元。
+适合卖出：已记录持仓里 triggered 为 true 的，写名称、代码和 sellDay。ifHeldSellToday 里的基金写成「若已持有，今天适合卖出」。两边都空就写今天没有适合卖出的。持仓为空时说明需要先提供已买入的代码。
+
+不要编造基金、金额或未来的卖出日期。reached20 为 false 时写明这段历史没有达到年化 20%。
